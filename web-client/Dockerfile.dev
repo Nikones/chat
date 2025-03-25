@@ -1,0 +1,15 @@
+FROM node:16-alpine
+
+WORKDIR /app
+
+# Копируем файлы зависимостей
+COPY package.json package-lock.json* ./
+
+# Устанавливаем зависимости
+RUN npm install
+
+# Указываем порт для разработки
+EXPOSE 3000
+
+# Запускаем сервер разработки слушая на всех интерфейсах
+CMD ["npm", "start", "--", "--host", "0.0.0.0"]

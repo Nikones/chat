@@ -1,0 +1,39 @@
+{
+    "server": {
+        "port": "8080",
+        "host": "0.0.0.0"
+    },
+    "database": {
+        "host": "10.16.52.12",
+        "port": "5432",
+        "user": "chat_user",
+        "password": "S3cur3P4ssw0rd!2025",
+        "dbname": "secure_chat"
+    },
+    "jwt": {
+        "secret": "c4H8jL2kP9sR7vB3xZ6dF1gT5mN8qE0y",
+        "expiry": 24
+    },
+    "sfu": {
+        "host": "10.16.52.14",
+        "port": "7880",
+        "api_key": "APIdL717D1nEfC0",
+        "api_secret": "rRf7KDspB3inmBQNCX2Nf1EgLKDmJ6xngqhYrPm8w0A",
+        "ice_servers": [
+            {
+                "urls": "stun:chat.kikita.ru:3478"
+            },
+            {
+                "urls": "turn:chat.kikita.ru:3478",
+                "username": "livekit",
+                "credential": "liveturnkey"
+            }
+        ]
+    },
+    "redis": {
+        "host": "10.16.52.13",
+        "port": "6379",
+        "password": "R3d1sSecur3P@ss!",
+        "db": 0
+    }
+}

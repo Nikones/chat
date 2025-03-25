@@ -1,0 +1,100 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: docker/server/Dockerfile
+    container_name: messenger-server
+    restart: always
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - SERVER_PORT=8080
+      - DB_HOST=10.16.52.12
+      - DB_PORT=5432
+      - DB_USER=chat_user
+      - DB_PASSWORD=S3cur3P4ssw0rd!2025
+      - DB_NAME=secure_chat
+      - JWT_SECRET=c4H8jL2kP9sR7vB3xZ6dF1gT5mN8qE0y
+      - SFU_HOST=10.16.52.14
+      - SFU_PORT=7880
+      - REDIS_HOST=10.16.52.13
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=R3d1sSecur3P@ss!
+      - CONFIG_PATH=/app/server/config/config.json
+      # Добавляем переменные для первоначального администратора
+      - INITIAL_ADMIN_USERNAME=admin
+      - INITIAL_ADMIN_PASSWORD=YourStrongPassword123!
+    networks:
+      opt_dmz_network:
+        ipv4_address: 10.16.52.11
+    volumes:
+      - server-logs:/app/logs
+
+  postgres:
+    image: postgres:14-alpine
+    container_name: messenger-postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=chat_user
+      - POSTGRES_PASSWORD=S3cur3P4ssw0rd!2025
+      - POSTGRES_DB=secure_chat
+    networks:
+      opt_dmz_network:
+        ipv4_address: 10.16.52.12
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:alpine
+    container_name: messenger-redis
+    restart: always
+    command: redis-server --requirepass R3d1sSecur3P@ss!
+    networks:
+      opt_dmz_network:
+        ipv4_address: 10.16.52.13
+    volumes:
+      - redis-data:/data
+
+  # LiveKit SFU сервер
+  sfu:
+    image: livekit/livekit-server:latest
+    container_name: messenger-sfu
+    restart: always
+    networks:
+      opt_dmz_network:
+        ipv4_address: 10.16.52.14
+    volumes:
+      - ./livekit-config.yaml:/livekit-config.yaml
+    command: --config /livekit-config.yaml
+
+  # Веб-клиент
+  web-client:
+    build:
+      context: ./web-client
+      dockerfile: Dockerfile.dev
+    container_name: messenger-web-client
+    restart: always
+    environment:
+      - WDS_SOCKET_HOST=chat.kikita.ru
+      - DANGEROUSLY_DISABLE_HOST_CHECK=true
+      - PUBLIC_URL=https://chat.kikita.ru
+      - NODE_ENV=development
+    command: npm start -- --host 0.0.0.0
+    volumes:
+      - ./web-client:/app
+      - /app/node_modules
+    depends_on:
+      - server
+    networks:
+      opt_dmz_network:
+        ipv4_address: 10.16.52.15
+
+networks:
+  opt_dmz_network:
+    external: true
+
+volumes:
+  postgres-data:
+  redis-data:
+  server-logs:
