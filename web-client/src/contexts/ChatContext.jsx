@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useEffect, useCallback } fr
 import { useAuth } from './AuthContext';
 import websocketService from '../utils/websocket';
 import encryptionService from '../utils/encryption';
+import messagesApi from '../api/messages';
 
 const ChatContext = createContext();
 
@@ -146,75 +147,87 @@ export const ChatProvider = ({ children }) => {
 
   // Отправка сообщения
   const sendMessage = async (recipientId, content) => {
-    if (!connected) return false;
-    
     try {
-      // Шифруем сообщение перед отправкой
+      // Шифруем сообщение перед отправкой (только для WebSocket)
       const encryptedContent = await encryptionService.encryptMessage(
         content,
         recipientId.toString()
       );
       
-      // Отправляем через WebSocket
-      websocketService.sendMessage({
-        type: 'text',
-        content: {
-          recipient_id: parseInt(recipientId),
-          content: encryptedContent
-        }
-      });
+      // Пробуем отправить через HTTP API
+      const result = await messagesApi.sendMessage(
+        parseInt(recipientId),
+        content, // Не шифруем для HTTP - сервер сохранит как есть
+        token
+      );
       
-      // Добавляем сообщение в локальное состояние
-      setMessages(prevMessages => {
-        const conversationId = recipientId.toString();
-        const conversationMessages = prevMessages[conversationId] || [];
-        
-        return {
-          ...prevMessages,
-          [conversationId]: [
-            ...conversationMessages,
-            {
-              id: Math.random().toString(36).substr(2, 9), // Временный ID
-              sender_id: currentUser.id,
-              recipient_id: parseInt(recipientId),
-              content: content,
-              is_read: false,
-              created_at: new Date().toISOString()
-            }
-          ]
-        };
-      });
-      
-      // Обновляем список разговоров
-      setConversations(prevConversations => {
-        const conversationIndex = prevConversations.findIndex(
-          c => c.id === recipientId.toString()
-        );
-        
-        if (conversationIndex >= 0) {
-          // Обновляем существующий разговор
-          const updatedConversations = [...prevConversations];
-          updatedConversations[conversationIndex] = {
-            ...updatedConversations[conversationIndex],
-            lastMessage: content,
-            lastMessageTime: new Date().toISOString()
+      // Если успешно, добавляем сообщение в локальное состояние
+      if (result) {
+        setMessages(prevMessages => {
+          const conversationId = recipientId.toString();
+          const conversationMessages = prevMessages[conversationId] || [];
+          
+          return {
+            ...prevMessages,
+            [conversationId]: [
+              ...conversationMessages,
+              {
+                id: result.id || Math.random().toString(36).substr(2, 9),
+                sender_id: currentUser.id,
+                recipient_id: parseInt(recipientId),
+                content: content,
+                is_read: false,
+                created_at: result.created_at || new Date().toISOString()
+              }
+            ]
           };
-          return updatedConversations;
-        } else {
-          // Создаем новый разговор
-          return [
-            ...prevConversations,
-            {
-              id: recipientId.toString(),
-              name: `Пользователь ${recipientId}`,
+        });
+        
+        // Обновляем список разговоров
+        setConversations(prevConversations => {
+          const conversationIndex = prevConversations.findIndex(
+            c => c.id === recipientId.toString()
+          );
+          
+          if (conversationIndex >= 0) {
+            // Обновляем существующий разговор
+            const updatedConversations = [...prevConversations];
+            updatedConversations[conversationIndex] = {
+              ...updatedConversations[conversationIndex],
               lastMessage: content,
               lastMessageTime: new Date().toISOString()
+            };
+            return updatedConversations;
+          } else {
+            // Создаем новый разговор
+            return [
+              ...prevConversations,
+              {
+                id: recipientId.toString(),
+                name: `Пользователь ${recipientId}`,
+                lastMessage: content,
+                lastMessageTime: new Date().toISOString()
+              }
+            ];
+          }
+        });
+        
+        // Если HTTP запрос успешен, но соединение WebSocket тоже есть,
+        // дублируем отправку через WebSocket для real-time обновления
+        if (connected) {
+          websocketService.sendMessage({
+            type: 'text',
+            content: {
+              recipient_id: parseInt(recipientId),
+              content: encryptedContent
             }
-          ];
+          });
         }
-      });
+        
+        return true;
+      }
       
-      return true;
+      return false;
     } catch (error) {
       console.error('Ошибка отправки сообщения:', error);
       return false;

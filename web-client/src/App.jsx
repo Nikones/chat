@@ -12,6 +12,7 @@ import Login from './components/Auth/Login';
 import Setup from './components/Auth/Setup';
 import ChatLayout from './components/Chat/ChatLayout';
 import PrivateRoute from './components/Auth/PrivateRoute';
+import AdminPanel from './components/Admin/AdminPanel';
 
 // Создаем темную тему
 const darkTheme = createTheme({
@@ -39,10 +40,14 @@ function App() {
   useEffect(() => {
     const checkInitialization = async () => {
       try {
-        const response = await axios.get('/api/system/initialized');
+        // Указываем прямой IP-адрес сервера
+        const response = await axios.get('http://10.16.52.11:8080/api/system/initialized');
+        console.log('Ответ инициализации:', response.data);
         setSystemInitialized(response.data.initialized);
       } catch (error) {
         console.error('Ошибка при проверке инициализации системы:', error);
+        // При ошибке считаем систему не инициализированной
+        setSystemInitialized(false);
       } finally {
         setCheckingSystem(false);
       }
@@ -87,6 +92,14 @@ function App() {
         {systemInitialized && (
           <>
             <Route path="/login" element={<Login />} />
+            <Route 
+              path="/admin" 
+              element={
+                <PrivateRoute requireAdmin={true}>
+                  <AdminPanel />
+                </PrivateRoute>
+              } 
+            />
             <Route 
               path="/*" 
               element={

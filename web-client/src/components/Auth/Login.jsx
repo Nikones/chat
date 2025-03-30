@@ -12,6 +12,7 @@ import {
   Alert
 } from '@mui/material';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import axios from 'axios';
 
 const Login = () => {
   const { login, isAuthenticated } = useAuth();
@@ -25,18 +26,48 @@ const Login = () => {
     e.preventDefault();
     
     if (!username || !password) {
-      setError('Пожалуйста, введите имя пользователя и пароль');
+      setError('Пожалуйста, заполните все поля');
       return;
     }
     
     try {
-      setError('');
       setLoading(true);
+      setError('');
+      
+      console.log('Попытка входа с логином:', username);
+      
+      // Напрямую вызываем axios для проверки
+      const loginUrl = 'http://10.16.52.11:8080/api/login';
+      console.log('Отправка запроса на:', loginUrl);
+      
+      // Используем axios напрямую для логирования 
+      const response = await axios.post(loginUrl, {
+        username,
+        password
+      });
+      
+      console.log('Ответ от сервера:', response.status, response.statusText);
+      console.log('Данные ответа:', response.data);
+      
+      // Вход через контекст авторизации
       await login(username, password);
       navigate('/');
     } catch (err) {
-      setError('Неверное имя пользователя или пароль');
       console.error('Ошибка входа:', err);
+      if (err.response) {
+        console.error('Детали ответа:', {
+          status: err.response.status,
+          statusText: err.response.statusText,
+          data: err.response.data
+        });
+        
+        setError(err.response.data?.error || 'Произошла ошибка при входе');
+      } else if (err.request) {
+        console.error('Нет ответа от сервера:', err.request);
+        setError('Сервер недоступен. Проверьте подключение к сети');
+      } else {
+        setError('Произошла ошибка при входе');
+      }
     } finally {
       setLoading(false);
     }

@@ -47,9 +47,7 @@ class WebSocketService {
     try {
       // Создаем URL для WebSocket
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = process.env.NODE_ENV === 'production' 
-        ? window.location.host  // Используем текущий хост
-        : window.location.host;
+      const host = window.location.host;  // Всегда используем текущий хост
       
       const wsUrl = `${protocol}//${host}/api/ws`;
       console.log(`WebSocket: подключение к ${wsUrl}`);
@@ -59,6 +57,8 @@ class WebSocketService {
       
       // После подключения отправляем токен
       this.socket.onopen = () => {
+        console.log('WebSocket: соединение открыто, отправляем токен аутентификации');
+        
         // Отправляем токен в первом сообщении
         this.socket.send(JSON.stringify({
           type: 'auth',
@@ -113,6 +113,7 @@ class WebSocketService {
     try {
       // Преобразуем сообщение в JSON строку
       const messageStr = JSON.stringify(message);
+      console.log('WebSocket: отправка сообщения', message);
       this.socket.send(messageStr);
       return true;
     } catch (error) {
@@ -206,6 +207,7 @@ class WebSocketService {
   handleMessage(event) {
     try {
       // Парсим полученное сообщение
+      console.log('WebSocket: получено сообщение', event.data);
       const message = JSON.parse(event.data);
       
       // Запускаем все обработчики сообщений
@@ -217,7 +219,7 @@ class WebSocketService {
         }
       });
     } catch (error) {
-      console.error('WebSocket: ошибка разбора сообщения', error);
+      console.error('WebSocket: ошибка разбора сообщения', error, event.data);
     }
   }
 
@@ -249,7 +251,6 @@ class WebSocketService {
   }
 }
 
-// Создаем синглтон для использования во всем приложении
+// Создаем и экспортируем экземпляр сервиса
 const websocketService = new WebSocketService();
-
 export default websocketService;

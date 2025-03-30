@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   List,
   ListItem,
@@ -14,15 +14,22 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  TextField,
   Box,
-  Divider
+  Divider,
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Alert
 } from '@mui/material';
 import { styled, alpha } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import PersonIcon from '@mui/icons-material/Person';
 import { useChat } from '../../contexts/ChatContext';
+import { useAuth } from '../../contexts/AuthContext';
+import authApi from '../../api/auth';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
@@ -76,9 +83,47 @@ const formatTime = (timestamp) => {
 
 const ChatList = ({ onSelectChat }) => {
   const { conversations, activeConversation, setActiveConversation } = useChat();
+  const { token, currentUser } = useAuth();
   const [search, setSearch] = useState('');
   const [newChatDialogOpen, setNewChatDialogOpen] = useState(false);
-  const [newChatUserId, setNewChatUserId] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [error, setError] = useState('');
+
+  // Загрузка списка пользователей
+  useEffect(() => {
+    const fetchUsers = async () => {
+      if (!token) return;
+      
+      try {
+        setLoadingUsers(true);
+        setError('');
+        // Используем getChatUsers вместо getUsers для обычных пользователей
+        // Если пользователь админ, используем getUsers для полного списка
+        let usersList = [];
+        
+        if (currentUser.role === 'admin') {
+          // Админу доступен полный список с ролями
+          usersList = await authApi.getUsers(token);
+        } else {
+          // Обычному пользователю доступен только список для чатов
+          usersList = await authApi.getChatUsers(token);
+        }
+
+        // Отфильтруем текущего пользователя из списка (хотя бэкенд это уже делает)
+        const filteredUsers = usersList.filter(user => user.id !== currentUser.id);
+        setUsers(filteredUsers);
+      } catch (err) {
+        console.error('Ошибка при загрузке пользователей:', err);
+        setError('Не удалось загрузить список пользователей');
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+
+    fetchUsers();
+  }, [token, currentUser]);
 
   // Фильтрация чатов по поиску
   const filteredConversations = conversations.filter(conversation =>
@@ -93,18 +138,28 @@ const ChatList = ({ onSelectChat }) => {
 
   // Обработчик создания нового чата
   const handleCreateNewChat = () => {
-    if (!newChatUserId) return;
+    if (!selectedUserId) {
+      setError('Выберите пользователя для чата');
+      return;
+    }
+    
+    // Находим пользователя из списка
+    const selectedUser = users.find(user => user.id.toString() === selectedUserId);
+    if (!selectedUser) {
+      setError('Выбранный пользователь не найден');
+      return;
+    }
     
     // Проверяем, существует ли уже такой чат
-    const existingConversation = conversations.find(c => c.id === newChatUserId);
+    const existingConversation = conversations.find(c => c.id === selectedUserId);
     
     if (existingConversation) {
       setActiveConversation(existingConversation);
     } else {
       // Создаем новый чат
       const newConversation = {
-        id: newChatUserId,
-        name: `Пользователь ${newChatUserId}`,
+        id: selectedUserId,
+        name: selectedUser.username,
         lastMessage: '',
         lastMessageTime: null
       };
@@ -113,7 +168,7 @@ const ChatList = ({ onSelectChat }) => {
     }
     
     setNewChatDialogOpen(false);
-    setNewChatUserId('');
+    setSelectedUserId('');
     if (onSelectChat) onSelectChat();
   };
 
@@ -199,9 +254,20 @@ const ChatList = ({ onSelectChat }) => {
                     </Typography>
                     : 'Нет сообщений'
                 }
+                secondaryTypographyProps={{
+                  sx: {
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }
+                }}
               />
               {conversation.lastMessageTime && (
-                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                <Typography 
+                  variant="caption" 
+                  color="text.secondary"
+                  sx={{ ml: 1 }}
+                >
                   {formatTime(conversation.lastMessageTime)}
                 </Typography>
               )}
@@ -209,40 +275,67 @@ const ChatList = ({ onSelectChat }) => {
           ))
         ) : (
           <ListItem>
-            <ListItemText
-              primary="Нет чатов"
-              secondary={search ? "Попробуйте другой запрос" : "Начните новый чат"}
+            <ListItemText 
+              primary={
+                <Typography align="center" color="text.secondary">
+                  {search ? 'Нет результатов поиска' : 'Нет активных чатов'}
+                </Typography>
+              }
+              secondary={
+                search ? null : (
+                  <Typography align="center" variant="caption" color="text.secondary">
+                    Нажмите + чтобы начать новый чат
+                  </Typography>
+                )
+              }
             />
           </ListItem>
         )}
       </List>
-      
+
       {/* Диалог создания нового чата */}
-      <Dialog 
-        open={newChatDialogOpen} 
-        onClose={() => setNewChatDialogOpen(false)}
-        aria-labelledby="new-chat-dialog-title"
-      >
-        <DialogTitle id="new-chat-dialog-title">Новый чат</DialogTitle>
+      <Dialog open={newChatDialogOpen} onClose={() => setNewChatDialogOpen(false)}>
+        <DialogTitle>Создать новый чат</DialogTitle>
         <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            id="userId"
-            label="ID пользователя"
-            type="text"
-            fullWidth
-            variant="outlined"
-            value={newChatUserId}
-            onChange={(e) => setNewChatUserId(e.target.value)}
-          />
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          
+          {loadingUsers ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <FormControl fullWidth sx={{ mt: 1 }}>
+              <InputLabel id="user-select-label">Выберите пользователя</InputLabel>
+              <Select
+                labelId="user-select-label"
+                id="user-select"
+                value={selectedUserId}
+                label="Выберите пользователя"
+                onChange={(e) => setSelectedUserId(e.target.value)}
+              >
+                {users.length > 0 ? (
+                  users.map((user) => (
+                    <MenuItem key={user.id} value={user.id.toString()}>
+                      {user.username}
+                    </MenuItem>
+                  ))
+                ) : (
+                  <MenuItem disabled>Нет доступных пользователей</MenuItem>
+                )}
+              </Select>
+            </FormControl>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setNewChatDialogOpen(false)}>Отмена</Button>
           <Button 
             onClick={handleCreateNewChat} 
-            color="primary"
-            disabled={!newChatUserId}
+            variant="contained" 
+            disabled={!selectedUserId || loadingUsers}
           >
             Создать
           </Button>

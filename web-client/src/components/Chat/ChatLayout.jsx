@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Box, Drawer, AppBar, Toolbar, Typography, IconButton, useMediaQuery, useTheme } from '@mui/material';
+import { Box, Drawer, AppBar, Toolbar, Typography, IconButton, useMediaQuery, useTheme, Button } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import AccountCircle from '@mui/icons-material/AccountCircle';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useChat } from '../../contexts/ChatContext';
 import ChatList from './ChatList';
@@ -18,9 +20,15 @@ const ChatLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { currentUser, logout } = useAuth();
   const { activeConversation, callState } = useChat();
+  const navigate = useNavigate();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
+  };
+
+  // Обработчик перехода в админ-панель
+  const goToAdminPanel = () => {
+    navigate('/admin');
   };
 
   return (
@@ -50,6 +58,18 @@ const ChatLayout = () => {
           </Typography>
           
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            {/* Кнопка админ-панели для администраторов */}
+            {currentUser && currentUser.role === 'admin' && (
+              <Button
+                color="inherit"
+                startIcon={<AdminPanelSettingsIcon />}
+                onClick={goToAdminPanel}
+                sx={{ mr: 2, display: { xs: 'none', sm: 'flex' } }}
+              >
+                Админ-панель
+              </Button>
+            )}
+            
             <IconButton color="inherit">
               <AccountCircle />
             </IconButton>

@@ -3,7 +3,7 @@ import axios from 'axios';
 // Базовый URL для API
 const API_URL = process.env.NODE_ENV === 'production' 
   ? 'https://chat.kikita.ru/api'
-  : 'http://localhost:8080/api';
+  : 'http://10.16.52.11:8080/api';
 
 /**
  * Класс для работы с API аутентификации
@@ -87,6 +87,34 @@ class AuthAPI {
           throw new Error('У вас нет прав для просмотра списка пользователей');
         }
         throw new Error(error.response.data.error || 'Ошибка получения списка пользователей');
+      } else if (error.request) {
+        throw new Error('Сервер недоступен. Проверьте подключение к интернету');
+      } else {
+        throw new Error('Ошибка при отправке запроса');
+      }
+    }
+  }
+
+  /**
+   * Получение списка пользователей для чата (доступно всем)
+   * @param {string} token - JWT токен
+   * @returns {Promise<Array>} Список пользователей для чата
+   */
+  async getChatUsers(token) {
+    try {
+      const response = await axios.get(`${API_URL}/chat/users`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      return response.data;
+    } catch (error) {
+      if (error.response) {
+        if (error.response.status === 401) {
+          throw new Error('Сессия истекла. Пожалуйста, войдите снова');
+        }
+        throw new Error(error.response.data.error || 'Ошибка получения списка пользователей для чата');
       } else if (error.request) {
         throw new Error('Сервер недоступен. Проверьте подключение к интернету');
       } else {

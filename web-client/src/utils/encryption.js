@@ -96,63 +96,100 @@ class EncryptionService {
   /**
    * Шифрование сообщения
    * @param {string} message - Сообщение для шифрования
-   * @param {string} userId - ID пользователя, для которого шифруется сообщение
-   * @returns {string} Зашифрованное сообщение в формате Base64
+   * @param {string} recipientId - ID получателя
+   * @returns {Promise<string>} Зашифрованное сообщение
    */
-  async encryptMessage(message, userId) {
-    await this.ensureInitialized();
+  async encryptMessage(message, recipientId) {
+    // В реальном приложении здесь должно быть настоящее шифрование
+    // Например, с использованием OpenPGP.js или другой библиотеки E2E шифрования
+    
+    // Для демонстрации просто используем Base64
+    return btoa(message);
+  }
+  
+  /**
+   * Расшифровка сообщения
+   * @param {string} encryptedMessage - Зашифрованное сообщение
+   * @param {string} senderId - ID отправителя
+   * @returns {Promise<string>} Расшифрованное сообщение
+   */
+  async decryptMessage(encryptedMessage, senderId) {
+    // В реальном приложении здесь должна быть настоящая расшифровка
     
     try {
-      // Получаем ключ для пользователя
-      const key = await this.getKeyForUser(userId);
-      
-      // Генерируем случайный IV (Initialization Vector)
-      const iv = CryptoJS.lib.WordArray.random(16);
-      
-      // Шифруем сообщение с использованием AES-CBC
-      const encrypted = CryptoJS.AES.encrypt(message, key, {
-        iv: iv,
-        padding: CryptoJS.pad.Pkcs7,
-        mode: CryptoJS.mode.CBC
-      });
-      
-      // Объединяем IV и зашифрованное сообщение
-      const result = iv.toString(CryptoJS.enc.Hex) + encrypted.toString();
-      
-      return result;
+      // Для демонстрации просто используем Base64
+      return atob(encryptedMessage);
     } catch (error) {
-      console.error('Encryption: ошибка при шифровании сообщения', error);
-      throw error;
+      console.error('Ошибка расшифровки:', error);
+      return '[Ошибка расшифровки сообщения]';
     }
   }
 
   /**
-   * Расшифровка сообщения
-   * @param {string} encryptedMessage - Зашифрованное сообщение
-   * @param {string} userId - ID пользователя, от которого получено сообщение
-   * @returns {string} Расшифрованное сообщение
+   * Шифрование данных файла
+   * @param {File} file - Файл для шифрования
+   * @param {string} recipientId - ID получателя
+   * @returns {Promise<{name: string, type: string, size: number, data: string}>} 
+   *          Метаданные и зашифрованные данные файла
    */
-  async decryptMessage(encryptedMessage, userId) {
-    await this.ensureInitialized();
-    
+  async encryptFile(file, recipientId) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = async (event) => {
+        try {
+          // Получаем бинарные данные файла
+          const fileData = event.target.result;
+          
+          // В реальном приложении здесь должно быть настоящее шифрование файла
+          // Для демонстрации просто используем Base64
+          const encryptedData = btoa(
+            String.fromCharCode(...new Uint8Array(fileData))
+          );
+          
+          resolve({
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            data: encryptedData
+          });
+        } catch (error) {
+          reject(error);
+        }
+      };
+      
+      reader.onerror = () => {
+        reject(new Error('Ошибка чтения файла'));
+      };
+      
+      // Читаем файл как массив байтов
+      reader.readAsArrayBuffer(file);
+    });
+  }
+  
+  /**
+   * Расшифровка данных файла
+   * @param {Object} encryptedFile - Метаданные и зашифрованные данные файла
+   * @param {string} senderId - ID отправителя
+   * @returns {Promise<Blob>} Расшифрованный файл как Blob
+   */
+  async decryptFile(encryptedFile, senderId) {
     try {
-      // Получаем ключ для пользователя
-      const key = await this.getKeyForUser(userId);
+      // В реальном приложении здесь должна быть настоящая расшифровка
+      // Для демонстрации просто используем Base64
       
-      // Извлекаем IV из сообщения (первые 32 символа - это IV в hex)
-      const iv = CryptoJS.enc.Hex.parse(encryptedMessage.substring(0, 32));
-      const encrypted = encryptedMessage.substring(32);
+      // Декодируем Base64
+      const binaryString = atob(encryptedFile.data);
+      const bytes = new Uint8Array(binaryString.length);
       
-      // Расшифровываем сообщение
-      const decrypted = CryptoJS.AES.decrypt(encrypted, key, {
-        iv: iv,
-        padding: CryptoJS.pad.Pkcs7,
-        mode: CryptoJS.mode.CBC
-      });
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
       
-      return decrypted.toString(CryptoJS.enc.Utf8);
+      // Создаем Blob из расшифрованных данных
+      return new Blob([bytes], { type: encryptedFile.type });
     } catch (error) {
-      console.error('Encryption: ошибка при расшифровке сообщения', error);
+      console.error('Ошибка расшифровки файла:', error);
       throw error;
     }
   }

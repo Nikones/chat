@@ -5,9 +5,10 @@ import { useAuth } from '../../contexts/AuthContext';
 /**
  * Компонент для защиты приватных маршрутов
  * Если пользователь не авторизован, перенаправляем на страницу входа
+ * Если требуется роль администратора и пользователь не администратор, перенаправляем на главную страницу
  */
-const PrivateRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+const PrivateRoute = ({ children, requireAdmin = false }) => {
+  const { isAuthenticated, loading, currentUser } = useAuth();
 
   // Пока проверяется авторизация, показываем загрузку
   if (loading) {
@@ -19,7 +20,12 @@ const PrivateRoute = ({ children }) => {
     return <Navigate to="/login" />;
   }
 
-  // Если пользователь авторизован, рендерим содержимое
+  // Если требуется роль администратора, проверяем права доступа
+  if (requireAdmin && currentUser?.role !== 'admin') {
+    return <Navigate to="/" />;
+  }
+
+  // Если все проверки пройдены, рендерим содержимое
   return children;
 };
 

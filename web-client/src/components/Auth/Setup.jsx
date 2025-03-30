@@ -51,8 +51,8 @@ const Setup = () => {
       setLoading(true);
       setError('');
       
-      // Отправляем запрос на настройку системы
-      const response = await axios.post('/api/system/setup', {
+      // Отправляем запрос на настройку системы на прямой IP-адрес сервера
+      const response = await axios.post('http://10.16.52.11:8080/api/system/setup', {
         admin_username: username,
         admin_password: password
       });
