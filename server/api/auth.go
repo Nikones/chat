@@ -29,7 +29,13 @@ type InitSetupRequest struct {
 // Проверка, инициализирована ли система
 func (s *Server) handleCheckInitialized(c *gin.Context) {
 	// Проверяем инициализацию через метод базы данных
-	initialized := s.db.IsInitialized()
+	initialized, err := s.db.IsInitialized()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Ошибка проверки инициализации: " + err.Error(),
+		})
+		return
+	}
 
 	// Возвращаем результат в JSON формате
 	c.JSON(http.StatusOK, gin.H{
@@ -40,7 +46,13 @@ func (s *Server) handleCheckInitialized(c *gin.Context) {
 // Первоначальная настройка системы
 func (s *Server) handleInitialSetup(c *gin.Context) {
 	// Проверяем, инициализирована ли уже система
-	if s.db.IsInitialized() {
+	initialized, err := s.db.IsInitialized()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка проверки инициализации: " + err.Error()})
+		return
+	}
+
+	if initialized {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Система уже инициализирована"})
 		return
 	}

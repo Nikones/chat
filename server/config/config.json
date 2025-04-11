@@ -1,39 +1,54 @@
 {
     "server": {
-        "port": "8080",
-        "host": "0.0.0.0"
+        "host": "0.0.0.0",
+        "port": "9095",
+        "upload_dir": "./uploads",
+        "external_url": "https://chat.kikita.ru",
+        "cors": {
+            "allowed_origins": ["https://chat.kikita.ru"],
+            "allowed_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allowed_headers": ["Origin", "Content-Type", "Accept", "Authorization"]
+        },
+        "debug": true
     },
     "database": {
-        "host": "10.16.52.12",
+        "host": "db",
         "port": "5432",
-        "user": "chat_user",
-        "password": "S3cur3P4ssw0rd!2025",
-        "dbname": "secure_chat"
+        "user": "postgres",
+        "password": "postgres12345!",
+        "dbname": "messenger",
+        "sslmode": "disable",
+        "timezone": "UTC"
     },
     "jwt": {
-        "secret": "c4H8jL2kP9sR7vB3xZ6dF1gT5mN8qE0y",
-        "expiry": 24
-    },
-    "sfu": {
-        "host": "10.16.52.14",
-        "port": "7880",
-        "api_key": "APIdL717D1nEfC0",
-        "api_secret": "rRf7KDspB3inmBQNCX2Nf1EgLKDmJ6xngqhYrPm8w0A",
-        "ice_servers": [
-            {
-                "urls": "stun:chat.kikita.ru:3478"
-            },
-            {
-                "urls": "turn:chat.kikita.ru:3478",
-                "username": "livekit",
-                "credential": "liveturnkey"
-            }
-        ]
+        "secret": "super_secret_jwt_key",
+        "expiry": 360
     },
     "redis": {
-        "host": "10.16.52.13",
+        "host": "redis",
         "port": "6379",
-        "password": "R3d1sSecur3P@ss!",
-        "db": 0
+        "password": "",
+        "db": 0,
+        "enabled": true
+    },
+    "logger": {
+        "level": "debug",
+        "format": "json",
+        "output": "console"
+    },
+    "websocket": {
+        "port": "9091",
+        "message_buffer_size": 256,
+        "ping_interval": 30,
+        "ping_timeout": 60
+    },
+    "sfu": {
+        "host": "livekit",
+        "port": "7880"
+    },
+    "file_storage": {
+        "path": "./uploads",
+        "max_size_mb": 100,
+        "allowed_mime_types": "image/jpeg,image/png,image/gif,application/pdf,audio/mpeg,video/mp4"
     }
 }

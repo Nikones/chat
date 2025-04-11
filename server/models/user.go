@@ -13,6 +13,7 @@ type User struct {
 	Username  string         `json:"username" gorm:"unique;not null"`
 	Password  string         `json:"-" gorm:"not null"` // не включаем в JSON
 	Role      string         `json:"role" gorm:"not null;default:user"`
+	Avatar    string         `json:"avatar,omitempty" gorm:"default:''"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`

@@ -1,20 +1,66 @@
 package database
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"messenger/server/config"
+	"messenger/server/logger"
 	"messenger/server/models"
 
+	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 type Database struct {
 	*gorm.DB
+}
+
+// Создание GORM логгера на основе Zap
+type GormZapLogger struct{}
+
+func (g GormZapLogger) LogMode(level gormlogger.LogLevel) gormlogger.Interface {
+	return g
+}
+
+func (g GormZapLogger) Info(ctx context.Context, s string, args ...interface{}) {
+	logger.Infof(s, args...)
+}
+
+func (g GormZapLogger) Warn(ctx context.Context, s string, args ...interface{}) {
+	logger.Warnf(s, args...)
+}
+
+func (g GormZapLogger) Error(ctx context.Context, s string, args ...interface{}) {
+	logger.Errorf(s, args...)
+}
+
+func (g GormZapLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
+	elapsed := time.Since(begin)
+	sql, rows := fc()
+
+	logFields := map[string]interface{}{
+		"elapsed": elapsed,
+		"rows":    rows,
+		"sql":     sql,
+	}
+
+	if err != nil {
+		logFields["error"] = err
+		logger.ErrorfWithContext(logFields, "SQL Error: %s", err.Error())
+		return
+	}
+
+	// Логируем только медленные запросы (более 200ms)
+	if elapsed > 200*time.Millisecond {
+		logger.WarnfWithContext(logFields, "Slow SQL query (%.2fms)", float64(elapsed.Microseconds())/1000.0)
+	} else if logger.GetLogger().Level() == zap.DebugLevel {
+		// В режиме отладки логируем все запросы
+		logger.DebugfWithContext(logFields, "SQL query (%.2fms)", float64(elapsed.Microseconds())/1000.0)
+	}
 }
 
 func NewDatabase(cfg *config.Config) (*Database, error) {
@@ -27,21 +73,35 @@ func NewDatabase(cfg *config.Config) (*Database, error) {
 		cfg.Database.DBName,
 	)
 
+	logger.Infof("Подключение к БД: %s:%s/%s", cfg.Database.Host, cfg.Database.Port, cfg.Database.DBName)
+
 	// Несколько попыток подключения к БД (для запуска в docker-compose)
 	var db *gorm.DB
 	var err error
 	maxRetries := 5
 
+	// Настройка GORM логгера
+	gormLogConfig := &gormlogger.Config{
+		SlowThreshold: 200 * time.Millisecond,
+		LogLevel:      gormlogger.Warn,
+		Colorful:      false,
+	}
+
+	// Выбираем уровень логирования в зависимости от уровня основного логгера
+	if logger.GetLogger().Level() == zap.DebugLevel {
+		gormLogConfig.LogLevel = gormlogger.Info
+	}
+
 	for i := 0; i < maxRetries; i++ {
 		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-			Logger: logger.Default.LogMode(logger.Info),
+			Logger: GormZapLogger{},
 		})
 
 		if err == nil {
 			break
 		}
 
-		log.Printf("Попытка подключения к БД %d/%d: %v", i+1, maxRetries, err)
+		logger.Warnf("Попытка подключения к БД %d/%d: %v", i+1, maxRetries, err)
 		time.Sleep(5 * time.Second)
 	}
 
@@ -50,33 +110,55 @@ func NewDatabase(cfg *config.Config) (*Database, error) {
 	}
 
 	// Автомиграция моделей
-	err = db.AutoMigrate(&models.User{}, &models.Message{})
+	logger.Info("Запуск миграции моделей")
+	err = db.AutoMigrate(&models.User{}, &models.Message{}, &models.File{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ошибка миграции: %w", err)
 	}
 
 	// Проверка миграции
 	var count int64
 	result := db.Model(&models.User{}).Count(&count)
 	if result.Error != nil {
-		log.Printf("Ошибка при проверке пользователей: %v", result.Error)
+		logger.Warnf("Ошибка при проверке пользователей: %v", result.Error)
 	} else {
-		log.Printf("Система содержит %d пользователей", count)
+		logger.Infof("Система содержит %d пользователей", count)
 	}
 
 	return &Database{db}, nil
 }
 
 // Проверка, инициализирована ли система
-func (d *Database) IsInitialized() bool {
+func (db *Database) IsInitialized() (bool, error) {
 	var count int64
-	err := d.DB.Model(&models.User{}).Count(&count).Error
+	err := db.Model(&models.User{}).Count(&count).Error
 	if err != nil {
-		// При ошибке считаем, что система не инициализирована
-		log.Printf("Ошибка при проверке инициализации: %v", err)
-		return false
+		return false, err
 	}
-	return count > 0
+
+	// Система считается инициализированной, если есть хотя бы один пользователь
+	return count > 0, nil
+}
+
+// Сброс данных (для тестирования и разработки)
+func (db *Database) Reset() error {
+	logger.Warn("Сброс всех данных в БД!")
+
+	// Удаляем все записи из таблиц
+	if err := db.Exec("DELETE FROM files").Error; err != nil {
+		return err
+	}
+
+	if err := db.Exec("DELETE FROM messages").Error; err != nil {
+		return err
+	}
+
+	if err := db.Exec("DELETE FROM users").Error; err != nil {
+		return err
+	}
+
+	logger.Info("Данные успешно сброшены")
+	return nil
 }
 
 func (d *Database) Close() error {
