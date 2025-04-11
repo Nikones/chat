@@ -1,0 +1,138 @@
+.welcome-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background-color: #f8f9fa;
+  padding: 20px;
+}
+
+.welcome-content {
+  max-width: 600px;
+  text-align: center;
+  padding: 40px;
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+}
+
+.welcome-icon {
+  font-size: 60px;
+  color: #0d6efd;
+  margin-bottom: 20px;
+}
+
+.welcome-title {
+  font-size: 2rem;
+  font-weight: 600;
+  color: #212529;
+  margin-bottom: 15px;
+}
+
+.welcome-text {
+  font-size: 1.1rem;
+  color: #6c757d;
+  margin-bottom: 30px;
+}
+
+.welcome-features {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 30px;
+  margin-bottom: 20px;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  text-align: left;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.feature-item:hover {
+  background-color: #e9ecef;
+  transform: translateY(-2px);
+}
+
+.feature-icon {
+  font-size: 24px;
+  color: #0d6efd;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background-color: rgba(13, 110, 253, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 15px;
+  flex-shrink: 0;
+}
+
+.feature-info h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: #212529;
+}
+
+.feature-info p {
+  font-size: 0.95rem;
+  color: #6c757d;
+  margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .welcome-content {
+    padding: 30px 20px;
+  }
+  
+  .welcome-title {
+    font-size: 1.75rem;
+  }
+  
+  .welcome-icon {
+    font-size: 50px;
+  }
+}
+
+/* Темная тема */
+body.dark-theme .welcome-screen {
+  background-color: #222;
+}
+
+body.dark-theme .welcome-content {
+  background-color: #333;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+body.dark-theme .welcome-title {
+  color: #e9ecef;
+}
+
+body.dark-theme .welcome-text {
+  color: #adb5bd;
+}
+
+body.dark-theme .feature-item {
+  background-color: #444;
+}
+
+body.dark-theme .feature-item:hover {
+  background-color: #555;
+}
+
+body.dark-theme .feature-icon {
+  background-color: rgba(91, 158, 250, 0.2);
+}
+
+body.dark-theme .feature-info h3 {
+  color: #e9ecef;
+}
+
+body.dark-theme .feature-info p {
+  color: #adb5bd;
+} 

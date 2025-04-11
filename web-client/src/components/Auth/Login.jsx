@@ -1,26 +1,52 @@
-import React, { useState } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Container, Row, Col, Form, Button, Card, Alert, Spinner } from 'react-bootstrap';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import {
-  Container,
-  Box,
-  Typography,
-  TextField,
-  Button,
-  Paper,
-  Avatar,
-  Alert
-} from '@mui/material';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import axios from 'axios';
+import { checkSystemInitialization } from '../../api/apiInstance';
+
+// Базовый URL для API
+const API_URL = '/api';
 
 const Login = () => {
-  const { login, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(true);
+  const navigate = useNavigate();
+  const { login, isAuthenticated } = useAuth();
+  
+  // Проверка статуса инициализации при загрузке компонента
+  useEffect(() => {
+    const checkInitialization = async () => {
+      try {
+        // Если пользователь уже авторизован, переходим на главную
+        if (isAuthenticated) {
+          navigate('/');
+          return;
+        }
+        
+        // Используем новую функцию для проверки статуса системы
+        const { initialized, error } = await checkSystemInitialization();
+        
+        if (!initialized) {
+          // Система не инициализирована, перенаправляем на страницу настройки
+          console.log('Login: Система не инициализирована, перенаправляем на /setup');
+          navigate('/setup');
+        } else {
+          console.log('Login: Система инициализирована, остаемся на странице входа');
+        }
+      } catch (error) {
+        console.error('Login: Ошибка при проверке статуса инициализации:', error);
+        // При ошибке остаемся на странице входа
+      } finally {
+        setCheckingStatus(false);
+      }
+    };
+    
+    checkInitialization();
+  }, [navigate, isAuthenticated]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -31,125 +57,141 @@ const Login = () => {
     }
     
     try {
-      setLoading(true);
       setError('');
+      setLoading(true);
       
-      console.log('Попытка входа с логином:', username);
+      console.log('Login: Отправка запроса на вход...');
+      console.log(`Login: URL для входа: ${API_URL}/login`);
       
-      // Напрямую вызываем axios для проверки
-      const loginUrl = 'http://10.16.52.11:8080/api/login';
-      console.log('Отправка запроса на:', loginUrl);
-      
-      // Используем axios напрямую для логирования 
-      const response = await axios.post(loginUrl, {
-        username,
+      const response = await axios.post(`${API_URL}/login`, {
+        username, 
         password
       });
       
-      console.log('Ответ от сервера:', response.status, response.statusText);
-      console.log('Данные ответа:', response.data);
+      console.log('Login: Успешный ответ:', response.status, response.statusText);
       
-      // Вход через контекст авторизации
-      await login(username, password);
-      navigate('/');
+      if (response.data && response.data.token) {
+        // Успешный вход
+        await login(response.data.token, response.data.user);
+        navigate('/');
+      } else {
+        console.error('Login: Неверный формат ответа:', response.data);
+        setError('Неверный формат ответа от сервера');
+      }
     } catch (err) {
-      console.error('Ошибка входа:', err);
+      console.error('Login: Ошибка входа:', err);
+      
+      // Детальная информация об ошибке для отладки
       if (err.response) {
-        console.error('Детали ответа:', {
+        console.error('Login: Детали ошибки:', {
           status: err.response.status,
           statusText: err.response.statusText,
-          data: err.response.data
+          data: err.response.data,
+          headers: err.response.headers
         });
         
-        setError(err.response.data?.error || 'Произошла ошибка при входе');
+        if (err.response.data && err.response.data.error) {
+          setError(err.response.data.error);
+        } else {
+          setError(`Ошибка входа: ${err.response.status} ${err.response.statusText}`);
+        }
       } else if (err.request) {
-        console.error('Нет ответа от сервера:', err.request);
-        setError('Сервер недоступен. Проверьте подключение к сети');
+        console.error('Login: Запрос отправлен, но ответа нет:', err.request);
+        setError('Сервер не отвечает. Проверьте подключение к интернету.');
       } else {
-        setError('Произошла ошибка при входе');
+        console.error('Login: Ошибка настройки запроса:', err.message);
+        setError(`Ошибка: ${err.message}`);
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // Если пользователь уже авторизован, перенаправляем на главную
-  if (isAuthenticated) {
-    return <Navigate to="/" />;
+  // Показываем индикатор загрузки при проверке статуса
+  if (checkingStatus) {
+    return (
+      <Container className="py-5 text-center">
+        <Spinner animation="border" variant="primary" />
+        <p className="mt-3">Проверка статуса системы...</p>
+      </Container>
+    );
   }
 
   return (
-    <Container component="main" maxWidth="xs">
-      <Box
-        sx={{
-          marginTop: 8,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-        }}
-      >
-        <Paper 
-          elevation={3} 
-          sx={{ 
-            padding: 4, 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center',
-            width: '100%'
-          }}
-        >
-          <Avatar sx={{ m: 1, bgcolor: 'primary.main' }}>
-            <LockOutlinedIcon />
-          </Avatar>
-          <Typography component="h1" variant="h5">
-            Вход в систему
-          </Typography>
-          
-          {error && (
-            <Alert severity="error" sx={{ width: '100%', mt: 2 }}>
-              {error}
-            </Alert>
-          )}
-          
-          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3, width: '100%' }}>
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              id="username"
-              label="Имя пользователя"
-              name="username"
-              autoComplete="username"
-              autoFocus
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              disabled={loading}
-            />
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              name="password"
-              label="Пароль"
-              type="password"
-              id="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
-            />
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              sx={{ mt: 3, mb: 2 }}
-              disabled={loading}
-            >
-              {loading ? 'Выполняется вход...' : 'Войти'}
-            </Button>
-          </Box>
-        </Paper>
-      </Box>
+    <Container className="py-5">
+      <Row className="justify-content-center">
+        <Col xs={12} sm={10} md={8} lg={6} xl={5}>
+          <Card className="shadow-lg border-0">
+            <Card.Header className="bg-primary text-white text-center py-4">
+              <h3>Мессенджер Кикиты</h3>
+              <p className="mb-0">Вход в систему</p>
+            </Card.Header>
+            <Card.Body className="p-4">
+              <p className="text-center mb-4">
+                Это чатик kikita.ru, так что просто так сюда не попадешь!
+              </p>
+              
+              {error && (
+                <Alert variant="danger">{error}</Alert>
+              )}
+              
+              <Form onSubmit={handleSubmit}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Имя пользователя</Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="Введите имя пользователя"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    disabled={loading}
+                    required
+                    autoFocus
+                  />
+                </Form.Group>
+                
+                <Form.Group className="mb-4">
+                  <Form.Label>Пароль</Form.Label>
+                  <Form.Control
+                    type="password"
+                    placeholder="Введите пароль"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                </Form.Group>
+                
+                <div className="d-grid gap-2">
+                  <Button
+                    variant="primary"
+                    type="submit"
+                    size="lg"
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <Spinner
+                          as="span"
+                          animation="border"
+                          size="sm"
+                          role="status"
+                          aria-hidden="true"
+                        />
+                        <span className="ms-2">Вход...</span>
+                      </>
+                    ) : (
+                      'Войти'
+                    )}
+                  </Button>
+                </div>
+              </Form>
+            </Card.Body>
+            <Card.Footer className="text-center p-3">
+              <small className="text-muted">© {new Date().getFullYear()} Kikita.ru - Все права защищены</small>
+            </Card.Footer>
+          </Card>
+        </Col>
+      </Row>
     </Container>
   );
 };

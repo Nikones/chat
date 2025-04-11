@@ -1,118 +1,319 @@
-import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
-import CircularProgress from '@mui/material/CircularProgress';
-import Box from '@mui/material/Box';
+import React, { useEffect, useState, Suspense, useCallback, useContext } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Container } from 'react-bootstrap';
 import axios from 'axios';
-import { useAuth } from './contexts/AuthContext';
+import { checkSystemInitialization } from './api/apiInstance';
+
+// Контексты
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AdminProvider } from './contexts/AdminContext';
+import { WebSocketProvider, useWebSocket } from './contexts/WebSocketContext';
+import { MessageProvider } from './contexts/MessageContext';
+import { CallProvider } from './contexts/CallContext';
 
 // Компоненты страниц
 import Login from './components/Auth/Login';
+import Register from './components/Auth/Register';
 import Setup from './components/Auth/Setup';
-import ChatLayout from './components/Chat/ChatLayout';
-import PrivateRoute from './components/Auth/PrivateRoute';
+import Layout from './components/layout/Layout';
+import Chat from './components/Chat/Chat';
 import AdminPanel from './components/Admin/AdminPanel';
+import Profile from './components/profile/Profile';
+import Settings from './components/settings/Settings';
+import NotFound from './components/common/NotFound';
 
-// Создаем темную тему
-const darkTheme = createTheme({
-  palette: {
-    mode: 'dark',
-    primary: {
-      main: '#4f9eed',
-    },
-    secondary: {
-      main: '#f44336',
-    },
-    background: {
-      default: '#121212',
-      paper: '#1e1e1e',
-    },
-  },
-});
+// Контекст для состояния системы
+const SystemContext = React.createContext(null);
 
-function App() {
-  const { loading: authLoading } = useAuth();
-  const [systemInitialized, setSystemInitialized] = useState(true);
-  const [checkingSystem, setCheckingSystem] = useState(true);
+export const useSystem = () => {
+  const context = useContext(SystemContext);
+  if (!context) {
+    throw new Error('useSystem должен использоваться внутри SystemProvider');
+  }
+  return context;
+};
 
-  // Проверяем, инициализирована ли система
+// Защищенные маршруты с проверкой аутентификации
+const PrivateRouteWrapper = ({ children }) => {
+  const { isAuthenticated, loading, checkSession } = useAuth();
+  const [checkPerformed, setCheckPerformed] = useState(false);
+  
   useEffect(() => {
-    const checkInitialization = async () => {
-      try {
-        // Указываем прямой IP-адрес сервера
-        const response = await axios.get('http://10.16.52.11:8080/api/system/initialized');
-        console.log('Ответ инициализации:', response.data);
-        setSystemInitialized(response.data.initialized);
-      } catch (error) {
-        console.error('Ошибка при проверке инициализации системы:', error);
-        // При ошибке считаем систему не инициализированной
-        setSystemInitialized(false);
-      } finally {
-        setCheckingSystem(false);
+    const performCheck = async () => {
+      if (!isAuthenticated && !loading && !checkPerformed) {
+        console.log('PrivateRoute: Проверка сессии');
+        await checkSession();
+        setCheckPerformed(true);
       }
     };
     
-    checkInitialization();
-  }, []);
-
-  if (authLoading || checkingSystem) {
+    performCheck();
+  }, [isAuthenticated, loading, checkSession, checkPerformed]);
+  
+  if (loading || (!isAuthenticated && !checkPerformed)) {
     return (
-      <ThemeProvider theme={darkTheme}>
-        <CssBaseline />
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            height: '100vh' 
-          }}
-        >
-          <CircularProgress />
-        </Box>
-      </ThemeProvider>
+      <div className="loading-screen">
+        <div className="spinner-border" role="status">
+          <span className="visually-hidden">Загрузка...</span>
+        </div>
+        <p className="text-muted">Проверка аутентификации...</p>
+      </div>
     );
   }
+  
+  return isAuthenticated ? children : <Navigate to="/login" />;
+};
 
+// Компонент для маршрутов администратора
+const AdminRoute = ({ children }) => {
+  const { user, isAuthenticated, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        <div className="spinner-border" role="status">
+          <span className="visually-hidden">Загрузка...</span>
+        </div>
+        <p className="text-muted">Проверка прав доступа...</p>
+      </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+  
+  if (user?.role !== 'admin') {
+    return <Navigate to="/" />;
+  }
+  
+  return children;
+};
+
+// Компонент для публичных маршрутов, перенаправляет авторизованных пользователей
+const PublicRoute = ({ children }) => {
+  const { isAuthenticated, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        <div className="spinner-border" role="status">
+          <span className="visually-hidden">Загрузка...</span>
+        </div>
+        <p className="text-muted">Проверка аутентификации...</p>
+      </div>
+    );
+  }
+  
+  return isAuthenticated ? <Navigate to="/" /> : children;
+};
+
+// Основной компонент с маршрутизацией
+const AppRoutes = () => {
+  const location = useLocation();
+  const { isAuthenticated, isAdmin, loading: authLoading } = useAuth();
+  
+  // Состояние системы
+  const [systemState, setSystemState] = useState({
+    checked: false,
+    initialized: false,
+    loading: true,
+    error: null
+  });
+  
+  // Функция для проверки статуса системы
+  const checkSystemStatus = useCallback(async () => {
+    try {
+      console.log('App: Проверка статуса инициализации системы...');
+      
+      // Используем новую функцию checkSystemInitialization
+      const result = await checkSystemInitialization();
+      console.log('App: Результат проверки статуса:', result);
+      
+      setSystemState({
+        checked: true,
+        initialized: result.initialized,
+        loading: false,
+        error: result.error
+      });
+      
+      return result.initialized;
+    } catch (error) {
+      console.error('App: Ошибка при проверке статуса системы:', error);
+      
+      // При любой ошибке считаем систему инициализированной
+      setSystemState({
+        checked: true,
+        initialized: true,
+        loading: false,
+        error: null
+      });
+      
+      return true;
+    }
+  }, []);
+  
+  // Эффект для проверки статуса системы
+  useEffect(() => {
+    if (!systemState.checked || systemState.loading) {
+      checkSystemStatus();
+    }
+  }, [checkSystemStatus, systemState.checked, systemState.loading]);
+  
+  // Показываем индикатор загрузки во время проверки системы
+  if (systemState.loading || authLoading) {
+    return (
+      <div className="loading-screen">
+        <div className="spinner-border" role="status">
+          <span className="visually-hidden">Загрузка...</span>
+        </div>
+        <h3>Мессенджер Кикиты</h3>
+        <p className="text-muted">Проверка состояния системы...</p>
+      </div>
+    );
+  }
+  
+  // Если система проверена и она не инициализирована
+  if (systemState.checked && !systemState.initialized) {
+    // И мы не находимся на странице setup, редиректим на нее
+    if (location.pathname !== '/setup') {
+      console.log('App: Система не инициализирована, редирект на /setup');
+      return <Navigate to="/setup" replace />;
+    }
+  }
+  
+  // Если система инициализирована и мы на странице setup - редирект на логин
+  if (systemState.initialized && location.pathname === '/setup') {
+    console.log('App: Система инициализирована, редирект с /setup на /login');
+    return <Navigate to="/login" replace />;
+  }
+  
+  // Возвращаем базовую конфигурацию маршрутов
   return (
-    <ThemeProvider theme={darkTheme}>
-      <CssBaseline />
+    <SystemContext.Provider value={{ ...systemState, checkStatus: checkSystemStatus }}>
       <Routes>
-        {/* Если система не инициализирована, показываем экран настройки */}
-        {!systemInitialized && (
-          <Route path="/setup" element={<Setup />} />
-        )}
+        {/* Публичные маршруты */}
+        <Route path="/login" element={
+          <PublicRoute>
+            <Login />
+          </PublicRoute>
+        } />
         
-        {/* Перенаправляем на настройку, если система не инициализирована */}
-        {!systemInitialized && (
-          <Route path="*" element={<Navigate to="/setup" />} />
-        )}
+        <Route path="/register" element={
+          <PublicRoute>
+            <Register />
+          </PublicRoute>
+        } />
         
-        {/* Обычные маршруты, если система инициализирована */}
-        {systemInitialized && (
-          <>
-            <Route path="/login" element={<Login />} />
-            <Route 
-              path="/admin" 
-              element={
-                <PrivateRoute requireAdmin={true}>
-                  <AdminPanel />
-                </PrivateRoute>
-              } 
-            />
-            <Route 
-              path="/*" 
-              element={
-                <PrivateRoute>
-                  <ChatLayout />
-                </PrivateRoute>
-              } 
-            />
-          </>
-        )}
+        {/* Маршрут настройки (доступен только если система не инициализирована) */}
+        <Route path="/setup" element={
+          systemState.initialized 
+            ? <Navigate to="/login" replace />
+            : <Setup />
+        } />
+        
+        {/* Защищенные маршруты внутри Layout */}
+        <Route path="/" element={
+          <PrivateRouteWrapper>
+            <WebSocketWrapper>
+              <Layout />
+            </WebSocketWrapper>
+          </PrivateRouteWrapper>
+        }>
+          <Route index element={<Chat />} />
+          <Route path="profile" element={<Profile />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="admin" element={
+            <AdminRoute>
+              <AdminPanel />
+            </AdminRoute>
+          } />
+          <Route path="*" element={<NotFound />} />
+        </Route>
       </Routes>
-    </ThemeProvider>
+    </SystemContext.Provider>
   );
-}
+};
+
+// Компонент для проверки WebSocket соединения
+const WebSocketWrapper = ({ children }) => {
+  const { ready, isConnected, error } = useWebSocket();
+  const [waitTime, setWaitTime] = useState(0);
+  const { isAuthenticated } = useAuth();
+  
+  // Не проверяем WebSocket-соединение для неаутентифицированных пользователей
+  if (!isAuthenticated) {
+    return children;
+  }
+  
+  // Увеличиваем таймер ожидания каждую секунду до 10 секунд
+  useEffect(() => {
+    if (!ready && !error) {
+      const timer = setInterval(() => {
+        setWaitTime(prev => {
+          if (prev < 10) return prev + 1;
+          return prev;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [ready, error]);
+  
+  // Отображаем детальную информацию о состоянии соединения
+  console.log(`WebSocketWrapper: ready=${ready}, isConnected=${isConnected}, error=${error}, waitTime=${waitTime}`);
+  
+  // Если WebSocket готов или возникла ошибка, или мы ждем слишком долго - рендерим детей
+  if (ready || error || waitTime >= 10) {
+    if (error) {
+      console.warn('WebSocketWrapper: Продолжение с ошибкой WebSocket:', error);
+    }
+    return children;
+  }
+  
+  // Иначе показываем индикатор загрузки
+  return (
+    <div className="loading-screen">
+      <div className="spinner-border" role="status">
+        <span className="visually-hidden">Загрузка...</span>
+      </div>
+      <p className="text-muted">Подключение к серверу сообщений... ({waitTime}с)</p>
+    </div>
+  );
+};
+
+// Компонент с провайдерами
+const AppWithProviders = () => {
+  return (
+    <Suspense fallback={
+      <div className="loading-screen">
+        <div className="spinner-border" role="status">
+          <span className="visually-hidden">Загрузка...</span>
+        </div>
+        <p className="text-muted">Загрузка приложения...</p>
+      </div>
+    }>
+      <AuthProvider>
+        <AdminProvider>
+          <WebSocketProvider>
+            <MessageProvider>
+              <CallProvider>
+                <AppRoutes />
+              </CallProvider>
+            </MessageProvider>
+          </WebSocketProvider>
+        </AdminProvider>
+      </AuthProvider>
+    </Suspense>
+  );
+};
+
+// Корневой компонент с Router
+const App = () => {
+  return (
+    <Router>
+      <AppWithProviders />
+    </Router>
+  );
+};
 
 export default App;

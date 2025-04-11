@@ -34,12 +34,12 @@ module.exports = {
     host: '0.0.0.0',      // Слушать на всех интерфейсах
     proxy: {
       '/api': {
-        target: 'http://10.16.52.11:8080', // Адрес сервера API
+        target: 'http://server:9095', // Обновлено на новый порт 9095
         secure: false,
         changeOrigin: true
       },
       '/ws': {
-        target: 'ws://10.16.52.11:8080',
+        target: 'ws://server:9091', // WebSocket порт остается прежним
         secure: false,
         ws: true
       }

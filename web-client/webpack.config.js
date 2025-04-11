@@ -1,23 +1,43 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const webpack = require('webpack');
+const dotenv = require('dotenv');
+
+// Загрузка переменных окружения из .env файла
+const env = dotenv.config().parsed || {};
+
+// Создание объекта с переменными окружения для DefinePlugin
+const envKeys = Object.keys(env).reduce((prev, next) => {
+  prev[`process.env.${next}`] = JSON.stringify(env[next]);
+  return prev;
+}, {});
 
 module.exports = {
-  entry: './src/index.jsx',
+  entry: {
+    main: ['./src/polyfills/process.js', './src/index.jsx']
+  },
   output: {
-    path: path.resolve(__dirname, 'dist'),
+    path: path.resolve(__dirname, 'build'),
     filename: 'bundle.js',
     publicPath: '/'
   },
   resolve: {
-    extensions: ['.js', '.jsx'],
+    extensions: ['.js', '.jsx', '.ts', '.tsx'],
+    alias: {
+      // Алиас для process/browser, чтобы использовать наш полифилл
+      'process/browser': path.resolve(__dirname, 'src/polyfills/process.js'),
+      process: path.resolve(__dirname, 'src/polyfills/process.js')
+    },
     fallback: {
-      "crypto": false  // Отключаем необходимость в crypto модуле
+      path: false,
+      fs: false,
+      os: false
     }
   },
   module: {
     rules: [
       {
-        test: /\.(js|jsx)$/,
+        test: /\.(js|jsx|ts|tsx)$/,
         exclude: /node_modules/,
         use: {
           loader: 'babel-loader'
@@ -26,6 +46,10 @@ module.exports = {
       {
         test: /\.css$/,
         use: ['style-loader', 'css-loader']
+      },
+      {
+        test: /\.(png|jpe?g|gif|svg|ico)$/i,
+        type: 'asset/resource'
       }
     ]
   },
@@ -35,20 +59,41 @@ module.exports = {
     hot: true,
     allowedHosts: 'all',
     host: '0.0.0.0',
+    proxy: {
+      '/api': {
+        target: process.env.REACT_APP_API_URL || 'http://localhost:9090',
+        secure: false,
+        changeOrigin: true
+      },
+      '/ws': {
+        target: process.env.REACT_APP_WS_URL || 'ws://localhost:9091',
+        secure: false,
+        ws: true
+      }
+    },
     headers: {
       'Access-Control-Allow-Origin': '*'
-    },
-    client: {
-      webSocketURL: {
-        hostname: 'chat.kikita.ru',
-        pathname: '/ws',
-        protocol: 'wss',
-      },
     }
   },
   plugins: [
     new HtmlWebpackPlugin({
-      template: './public/index.html'
+      template: './public/index.html',
+      favicon: './public/favicon.ico'
+    }),
+    // Эксплицитно определяем process.env
+    new webpack.DefinePlugin({
+      'process.env': JSON.stringify({
+        NODE_ENV: process.env.NODE_ENV || 'production',
+        ...Object.keys(env).reduce((acc, key) => {
+          acc[key] = env[key];
+          return acc;
+        }, {})
+      }),
+      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production')
+    }),
+    // Обеспечиваем доступность нашего полифилла process
+    new webpack.ProvidePlugin({
+      process: [path.resolve(__dirname, 'src/polyfills/process.js'), 'default']
     })
   ]
 };

@@ -1,0 +1,66 @@
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  background-color: #f8f9fa;
+}
+
+.message-input-container {
+  padding: 1rem;
+  border-top: 1px solid #dee2e6;
+  background-color: white;
+}
+
+.loading-messages-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  color: #6c757d;
+  font-style: italic;
+}
+
+/* Стили для темной темы */
+.dark-theme .chat-container {
+  background-color: #1e1e1e;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+}
+
+.dark-theme .messages-container {
+  background-color: #282828;
+}
+
+.dark-theme .message-input-container {
+  background-color: #1e1e1e;
+  border-top-color: #444;
+}
+
+.dark-theme .loading-messages-indicator {
+  color: #adb5bd;
+}
+
+/* Стили для мобильных устройств */
+@media (max-width: 768px) {
+  .chat-container {
+    border-radius: 0;
+    box-shadow: none;
+  }
+  
+  .messages-container {
+    padding: 0.5rem;
+  }
+  
+  .message-input-container {
+    padding: 0.5rem;
+  }
+} 

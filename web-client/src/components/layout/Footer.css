@@ -1,0 +1,35 @@
+.admin-footer {
+  background-color: #f7f7f7;
+  border-top: 1px solid #eaeaea;
+  padding: 12px 0;
+  margin-top: 24px;
+  color: #595959;
+  font-size: 0.85rem;
+}
+
+.footer-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer-text {
+  margin: 0;
+}
+
+.footer-version {
+  color: #8c8c8c;
+}
+
+/* Темная тема */
+@media (prefers-color-scheme: dark) {
+  .admin-footer {
+    background-color: #1f1f1f;
+    border-top-color: #333;
+    color: #a6a6a6;
+  }
+  
+  .footer-version {
+    color: #737373;
+  }
+} 

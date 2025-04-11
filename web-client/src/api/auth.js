@@ -1,9 +1,7 @@
 import axios from 'axios';
 
-// Базовый URL для API
-const API_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://chat.kikita.ru/api'
-  : 'http://10.16.52.11:8080/api';
+// Базовый URL для API (относительный путь)
+const API_URL = '/api';
 
 /**
  * Класс для работы с API аутентификации
@@ -20,6 +18,10 @@ class AuthAPI {
       const response = await axios.post(`${API_URL}/login`, {
         username,
         password
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
       
       return response.data;
@@ -158,3 +160,14 @@ class AuthAPI {
 // Экспорт экземпляра класса
 const authApi = new AuthAPI();
 export default authApi;
+
+// Именованные экспорты для совместимости
+export const login = (username, password) => authApi.login(username, password);
+export const getCurrentUser = (token) => authApi.getCurrentUser(token);
+export const logout = () => {
+  // Если есть функция для выхода, добавьте её в класс AuthAPI и используйте здесь
+  // Пока просто заглушка
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  return Promise.resolve();
+};

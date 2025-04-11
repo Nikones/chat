@@ -124,9 +124,9 @@ const ChatWindow = () => {
   };
   
   const handleFileChange = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setSelectedFile(file);
+    const files = Array.from(event.target.files);
+    if (files && files.length > 0) {
+      setSelectedFile(files[0]); // Показываем первый файл для превью
       setFileUploadOpen(true);
     }
   };
@@ -143,12 +143,18 @@ const ChatWindow = () => {
     if (selectedFile && activeConversation) {
       setSending(true);
       try {
-        // Пока просто отправляем сообщение о вложенном файле
-        // В будущем можно реализовать настоящую загрузку файлов
+        // Получаем все файлы из input
+        const files = Array.from(fileInputRef.current.files);
+        
+        // Отправляем сообщение с файлами
         await sendMessage(
           activeConversation.id, 
-          `[Файл] ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(2)} КБ)`
+          newMessage, // Можно отправить комментарий вместе с файлами
+          files
         );
+        
+        // Очищаем поле ввода и закрываем диалог
+        setNewMessage('');
         handleFileUploadClose();
       } catch (error) {
         console.error('Ошибка загрузки файла:', error);
@@ -327,16 +333,41 @@ const ChatWindow = () => {
         
         {/* Диалог загрузки файла */}
         <Dialog open={fileUploadOpen} onClose={handleFileUploadClose}>
-          <DialogTitle>Загрузка файла</DialogTitle>
+          <DialogTitle>Отправка файла</DialogTitle>
           <DialogContent>
-            {selectedFile && (
-              <Typography variant="body1">
-                Файл: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(2)} КБ)
-              </Typography>
-            )}
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-              Внимание: файл будет доступен только участникам чата.
-            </Typography>
+            <Box sx={{ my: 2 }}>
+              {selectedFile && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle1">
+                    {selectedFile.name}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {(selectedFile.size / 1024).toFixed(2)} КБ
+                  </Typography>
+                  
+                  {selectedFile.type.startsWith('image/') && (
+                    <Box sx={{ mt: 2, textAlign: 'center' }}>
+                      <img 
+                        src={URL.createObjectURL(selectedFile)} 
+                        alt={selectedFile.name}
+                        style={{ maxWidth: '100%', maxHeight: '200px' }}
+                      />
+                    </Box>
+                  )}
+                </Box>
+              )}
+              
+              <TextField
+                fullWidth
+                multiline
+                maxRows={4}
+                placeholder="Добавить комментарий к файлу (необязательно)"
+                variant="outlined"
+                margin="normal"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+              />
+            </Box>
           </DialogContent>
           <DialogActions>
             <Button onClick={handleFileUploadClose}>Отмена</Button>
@@ -345,7 +376,7 @@ const ChatWindow = () => {
               color="primary"
               disabled={sending}
             >
-              {sending ? <CircularProgress size={24} /> : 'Отправить'}
+              {sending ? 'Отправка...' : 'Отправить'}
             </Button>
           </DialogActions>
         </Dialog>

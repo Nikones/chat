@@ -1,100 +1,119 @@
+networks:
+  dmz_network:
+    external: true
+    name: opt_dmz_network
+
 services:
+  # Сервер мессенджера
   server:
     build:
-      context: .
-      dockerfile: docker/server/Dockerfile
+      context: ./server
+      dockerfile: Dockerfile
     container_name: messenger-server
-    restart: always
+    ports:
+      - "${SERVER_PORT:-9095}:9095"
+      - "9091:9091"  # WebSocket порт
     depends_on:
-      - postgres
+      - db
       - redis
     environment:
-      - SERVER_PORT=8080
-      - DB_HOST=10.16.52.12
-      - DB_PORT=5432
-      - DB_USER=chat_user
-      - DB_PASSWORD=S3cur3P4ssw0rd!2025
-      - DB_NAME=secure_chat
-      - JWT_SECRET=c4H8jL2kP9sR7vB3xZ6dF1gT5mN8qE0y
-      - SFU_HOST=10.16.52.14
-      - SFU_PORT=7880
-      - REDIS_HOST=10.16.52.13
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=R3d1sSecur3P@ss!
-      - CONFIG_PATH=/app/server/config/config.json
-      # Добавляем переменные для первоначального администратора
-      - INITIAL_ADMIN_USERNAME=admin
-      - INITIAL_ADMIN_PASSWORD=YourStrongPassword123!
-    networks:
-      opt_dmz_network:
-        ipv4_address: 10.16.52.11
+      - DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASSWORD:-postgres12345!}@db:5432/${DB_NAME:-messenger}?sslmode=disable
+      - JWT_SECRET=${JWT_SECRET:-gp2Ju8PPFTvLA4WRbDDNF5jUQ2sX7KcP}
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres12345!}
+      - DB_NAME=${DB_NAME:-messenger}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - DEBUG=${DEBUG:-true}
+      - SERVER_PORT=${SERVER_PORT:-9095}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-devsecret123}
+      - LIVEKIT_URL=${LIVEKIT_URL:-ws://livekit:7880}
+      - SSE_KEY_BASE64=${SSE_KEY_BASE64:-M3pjL1YwdURHbVgrQkRFdlhMRDZ1VzhxT1FFUG1WdmV0THRnZU8yYUhMWT0=}
+      - SERVER_ENCRYPTION_KEY=${SSE_KEY_BASE64:-M3pjL1YwdURHbVgrQkRFdlhMRDZ1VzhxT1FFUG1WdmV0THRnZU8yYUhMWT0=}
+      - REDIS_ENABLED=true
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - LOG_JSON=${LOG_JSON:-true}
+      - APP_ENV=${APP_ENV:-development}
+      - SERVER_HOST=0.0.0.0
+      - WEBSOCKET_PORT=9091
+      - CONFIG_PATH=/app/config/config.json
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Adm1n$3cureP@ss}
+    restart: unless-stopped
     volumes:
-      - server-logs:/app/logs
-
-  postgres:
-    image: postgres:14-alpine
-    container_name: messenger-postgres
-    restart: always
-    environment:
-      - POSTGRES_USER=chat_user
-      - POSTGRES_PASSWORD=S3cur3P4ssw0rd!2025
-      - POSTGRES_DB=secure_chat
+      - ./uploads:/app/uploads
+      - ./logs/server:/app/logs
     networks:
-      opt_dmz_network:
-        ipv4_address: 10.16.52.12
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
+      dmz_network:
+        ipv4_address: 10.16.52.15
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  redis:
-    image: redis:alpine
-    container_name: messenger-redis
-    restart: always
-    command: redis-server --requirepass R3d1sSecur3P@ss!
-    networks:
-      opt_dmz_network:
-        ipv4_address: 10.16.52.13
-    volumes:
-      - redis-data:/data
-
-  # LiveKit SFU сервер
-  sfu:
-    image: livekit/livekit-server:latest
-    container_name: messenger-sfu
-    restart: always
-    networks:
-      opt_dmz_network:
-        ipv4_address: 10.16.52.14
-    volumes:
-      - ./livekit-config.yaml:/livekit-config.yaml
-    command: --config /livekit-config.yaml
-
-  # Веб-клиент
-  web-client:
+  # Клиентское приложение
+  client:
     build:
-      context: ./web-client
-      dockerfile: Dockerfile.dev
-    container_name: messenger-web-client
-    restart: always
-    environment:
-      - WDS_SOCKET_HOST=chat.kikita.ru
-      - DANGEROUSLY_DISABLE_HOST_CHECK=true
-      - PUBLIC_URL=https://chat.kikita.ru
-      - NODE_ENV=development
-    command: npm start -- --host 0.0.0.0
-    volumes:
-      - ./web-client:/app
-      - /app/node_modules
+      context: .
+      dockerfile: docker/client/Dockerfile
+    ports:
+      - "55581:80"  # Веб-клиент на порту 55581 для прокси
     depends_on:
       - server
+    restart: unless-stopped
     networks:
-      opt_dmz_network:
-        ipv4_address: 10.16.52.15
+      dmz_network:
+        ipv4_address: 10.16.52.16
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-networks:
-  opt_dmz_network:
-    external: true
+  # База данных PostgreSQL
+  db:
+    image: postgres:16-alpine
+    container_name: messenger-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres12345!}
+      POSTGRES_DB: ${DB_NAME:-messenger}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      dmz_network:
+        ipv4_address: 10.16.52.17
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Redis для WebSocket масштабирования
+  redis:
+    image: redis:7-alpine
+    container_name: messenger-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    networks:
+      dmz_network:
+        ipv4_address: 10.16.52.18
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
-  postgres-data:
-  redis-data:
-  server-logs:
+  pg_data:
+  redis_data:

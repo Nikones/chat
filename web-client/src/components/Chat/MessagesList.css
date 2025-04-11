@@ -1,0 +1,271 @@
+.messages-list {
+  padding: 10px 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.message-container {
+  display: flex;
+  margin-bottom: 8px;
+  padding: 0 15px;
+  align-items: flex-end;
+}
+
+.message-container.grouped {
+  margin-bottom: 2px;
+}
+
+.message-from-me {
+  justify-content: flex-end;
+}
+
+.message-from-other {
+  justify-content: flex-start;
+}
+
+.message-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  margin-right: 8px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.message-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.message-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  background-color: #6c757d;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+
+.message-bubble {
+  border-radius: 18px;
+  padding: 8px 12px;
+  position: relative;
+  max-width: 65%;
+  word-wrap: break-word;
+}
+
+.message-from-me.grouped .message-bubble {
+  border-top-right-radius: 6px;
+}
+
+.message-from-other.grouped .message-bubble {
+  border-top-left-radius: 6px;
+}
+
+.message-bubble.from-me {
+  background-color: #0d6efd;
+  color: white;
+}
+
+.message-bubble.from-other {
+  background-color: #f0f2f5;
+  color: #1e2125;
+}
+
+.message-sender {
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 2px;
+  color: #0d6efd;
+}
+
+.message-text {
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.message-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+
+.from-me .message-meta {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.from-other .message-meta {
+  color: #6c757d;
+}
+
+.message-time {
+  margin-right: 4px;
+}
+
+.message-status-icon {
+  font-size: 0.7rem;
+}
+
+.message-status-icon.read {
+  color: #5bc0de;
+}
+
+.date-separator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 10px 0;
+  position: relative;
+  color: #6c757d;
+}
+
+.date-separator span {
+  background-color: white;
+  padding: 0 10px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  z-index: 1;
+}
+
+.date-separator::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 15px;
+  right: 15px;
+  height: 1px;
+  background-color: #dee2e6;
+  z-index: 0;
+}
+
+.message-attachments {
+  margin-top: 5px;
+}
+
+.message-image-container {
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+.message-image {
+  max-width: 100%;
+  display: block;
+  border-radius: 12px;
+}
+
+.message-file {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  margin-bottom: 5px;
+}
+
+.from-me .message-file {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.message-file-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  background-color: #e9ecef;
+  color: #495057;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 10px;
+}
+
+.from-me .message-file-icon {
+  background-color: rgba(255, 255, 255, 0.3);
+  color: white;
+}
+
+.message-file-info {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.message-file-name {
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.message-file-size {
+  font-size: 0.75rem;
+  color: #6c757d;
+}
+
+.from-me .message-file-size {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.message-file-download {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6c757d;
+  margin-left: 5px;
+  text-decoration: none;
+}
+
+.from-me .message-file-download {
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .message-bubble {
+    max-width: 80%;
+  }
+}
+
+/* Темная тема */
+body.dark-theme .message-bubble.from-other {
+  background-color: #333;
+  color: #e9ecef;
+}
+
+body.dark-theme .message-sender {
+  color: #5b9efa;
+}
+
+body.dark-theme .from-other .message-meta {
+  color: #adb5bd;
+}
+
+body.dark-theme .date-separator span {
+  background-color: #222;
+  color: #adb5bd;
+}
+
+body.dark-theme .date-separator::before {
+  background-color: #444;
+}
+
+body.dark-theme .message-file {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+body.dark-theme .message-file-icon {
+  background-color: #444;
+  color: #adb5bd;
+}
+
+body.dark-theme .from-other .message-file-size {
+  color: #adb5bd;
+} 

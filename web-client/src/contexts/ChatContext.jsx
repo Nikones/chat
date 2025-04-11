@@ -1,265 +1,283 @@
-import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
-import websocketService from '../utils/websocket';
-import encryptionService from '../utils/encryption';
-import messagesApi from '../api/messages';
+import { getChats, getMessages, sendMessageApi } from '../api/chat';
+import { 
+  encryptMessage, 
+  decryptMessage, 
+  generateChatKey, 
+  encryptChatKey, 
+  decryptChatKey 
+} from '../utils/crypto';
+import WebSocketService from '../api/websocket';
 
-const ChatContext = createContext();
+const ChatContext = createContext(null);
 
 export const useChat = () => useContext(ChatContext);
 
 export const ChatProvider = ({ children }) => {
-  const { currentUser, token, isAuthenticated } = useAuth();
-  const [connected, setConnected] = useState(false);
-  const [conversations, setConversations] = useState([]);
-  const [activeConversation, setActiveConversation] = useState(null);
-  const [messages, setMessages] = useState({});
-  const [callState, setCallState] = useState({
-    inCall: false,
-    incomingCall: null,
-    outgoingCall: null,
-    currentCall: null
-  });
+  const { user, isAuthenticated } = useAuth();
+  const [chats, setChats] = useState([]);
+  const [activeChat, setActiveChat] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [wsService, setWsService] = useState(null);
+  // Хранилище ключей шифрования для каждого чата
+  const [chatKeys, setChatKeys] = useState({});
 
-  // Обработчик новых сообщений
-  const handleNewMessage = useCallback(async (message) => {
-    if (message.type === 'text') {
-      // Расшифровываем сообщение
-      let decryptedContent;
-      try {
-        decryptedContent = await encryptionService.decryptMessage(
-          message.content,
-          message.sender_id.toString()
-        );
-      } catch (error) {
-        console.error('Ошибка расшифровки сообщения:', error);
-        decryptedContent = 'Ошибка расшифровки сообщения';
-      }
-
-      // Обновляем сообщения
-      setMessages(prevMessages => {
-        const conversationId = message.sender_id.toString();
-        const conversationMessages = prevMessages[conversationId] || [];
+  // Инициализация WebSocket соединения
+  useEffect(() => {
+    if (isAuthenticated && !wsService) {
+      const handleWsMessage = (message) => {
+        console.log('Получено сообщение через WebSocket:', message);
         
-        return {
-          ...prevMessages,
-          [conversationId]: [
-            ...conversationMessages,
-            {
-              ...message,
-              content: decryptedContent
-            }
-          ]
-        };
-      });
-
-      // Обновляем список разговоров
-      setConversations(prevConversations => {
-        const conversationIndex = prevConversations.findIndex(
-          c => c.id === message.sender_id.toString()
-        );
-
-        if (conversationIndex >= 0) {
-          // Обновляем существующий разговор
-          const updatedConversations = [...prevConversations];
-          updatedConversations[conversationIndex] = {
-            ...updatedConversations[conversationIndex],
-            lastMessage: decryptedContent,
-            lastMessageTime: new Date().toISOString()
-          };
-          return updatedConversations;
-        } else {
-          // Создаем новый разговор
-          return [
-            ...prevConversations,
-            {
-              id: message.sender_id.toString(),
-              name: `Пользователь ${message.sender_id}`,
-              lastMessage: decryptedContent,
-              lastMessageTime: new Date().toISOString()
-            }
-          ];
+        if (message.type === 'NEW_MESSAGE') {
+          // Обработка нового сообщения
+          handleNewMessage(message.data);
+        } else if (message.type === 'KEY_EXCHANGE') {
+          // Обработка обмена ключами
+          handleKeyExchange(message.data);
         }
-      });
-    } else if (message.type === 'call_offer') {
-      // Обработка входящего звонка
-      setCallState(prev => ({
-        ...prev,
-        incomingCall: {
-          from: message.sender_id,
-          sdp: message.content.sdp
-        }
-      }));
-    } else if (message.type === 'call_answer') {
-      // Обработка ответа на звонок
-      setCallState(prev => ({
-        ...prev,
-        outgoingCall: null,
-        currentCall: {
-          ...prev.currentCall,
-          connected: true,
-          remoteDescription: message.content.sdp
-        }
-      }));
-    } else if (message.type === 'ice_candidate') {
-      // Обработка ICE-кандидатов
-      if (callState.currentCall) {
-        // Обработка в компоненте звонка
-      }
-    }
-  }, [callState]);
-
-  // Соединение с WebSocket
-  useEffect(() => {
-    if (isAuthenticated && token) {
-      // Инициализация WebSocket
-      websocketService.init(token, handleNewMessage);
-      
-      // Обработчики соединения
-      const handleConnect = () => {
-        setConnected(true);
       };
-      
-      const handleDisconnect = () => {
-        setConnected(false);
+
+      const handleWsClose = () => {
+        console.log('WebSocket соединение закрыто');
       };
+
+      const handleWsError = (error) => {
+        console.error('WebSocket ошибка:', error);
+      };
+
+      // Создаем новый экземпляр WebSocket сервиса
+      const ws = new WebSocketService(
+        handleWsMessage,
+        handleWsClose,
+        handleWsError
+      );
       
-      // Регистрация обработчиков
-      websocketService.onConnect(handleConnect);
-      websocketService.onDisconnect(handleDisconnect);
-      
-      // Установка соединения
-      websocketService.connect();
-      
+      ws.connect();
+      setWsService(ws);
+
+      // Закрываем соединение при размонтировании
       return () => {
-        websocketService.disconnect();
+        if (ws) {
+          ws.disconnect();
+        }
       };
     }
-  }, [isAuthenticated, token, handleNewMessage]);
+  }, [isAuthenticated]);
 
-  // Загрузка разговоров при подключении
-  useEffect(() => {
-    if (connected && currentUser) {
-      // Загрузка данных происходит через WebSocket
-      // Можно добавить специальное сообщение для запроса существующих разговоров
+  // Загрузка списка чатов
+  const loadChats = useCallback(async () => {
+    if (!isAuthenticated) return;
+    
+    setLoading(true);
+    try {
+      const data = await getChats();
+      setChats(data);
+      
+      // Если есть чаты и нет активного, устанавливаем первый чат активным
+      if (data.length > 0 && !activeChat) {
+        setActiveChat(data[0]);
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки чатов:', error);
+    } finally {
+      setLoading(false);
     }
-  }, [connected, currentUser]);
+  }, [isAuthenticated, activeChat]);
+
+  // Загрузка сообщений чата
+  const loadMessages = useCallback(async (chatId) => {
+    if (!isAuthenticated || !chatId) return;
+    
+    setLoading(true);
+    try {
+      const data = await getMessages(chatId);
+      
+      // Получаем ключ для чата (или создаем новый)
+      const chatKey = await getChatKey(chatId);
+      
+      // Расшифровываем сообщения
+      const decryptedMessages = await Promise.all(
+        data.map(async (message) => {
+          if (message.encrypted && chatKey) {
+            try {
+              const decryptedText = await decryptMessage(message.text, chatKey);
+              return { ...message, text: decryptedText, decrypted: true };
+            } catch (error) {
+              console.error('Ошибка расшифровки сообщения:', error);
+              return { ...message, decryptError: true };
+            }
+          }
+          return message;
+        })
+      );
+      
+      setMessages(decryptedMessages);
+    } catch (error) {
+      console.error('Ошибка загрузки сообщений:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  // Получение ключа для чата (из хранилища или создание нового)
+  const getChatKey = async (chatId) => {
+    // Если у нас уже есть ключ для этого чата
+    if (chatKeys[chatId]) {
+      return chatKeys[chatId];
+    }
+    
+    // TODO: Загрузить ключ из IndexedDB или другого хранилища
+    
+    // Если ключа нет, создаем новый и обмениваемся им
+    const newChatKey = await generateChatKey();
+    
+    // Сохраняем ключ в состоянии
+    setChatKeys(prev => ({
+      ...prev,
+      [chatId]: newChatKey
+    }));
+    
+    // TODO: Сохранить ключ в IndexedDB
+    
+    // TODO: Обменяться ключом с другими участниками чата
+    
+    return newChatKey;
+  };
+
+  // Обработка нового сообщения из WebSocket
+  const handleNewMessage = async (messageData) => {
+    // Проверяем, относится ли сообщение к текущему активному чату
+    if (activeChat && messageData.chatId === activeChat.id) {
+      // Получаем ключ для чата
+      const chatKey = await getChatKey(messageData.chatId);
+      
+      // Расшифровываем сообщение, если оно зашифровано
+      let processedMessage = messageData;
+      if (messageData.encrypted && chatKey) {
+        try {
+          const decryptedText = await decryptMessage(messageData.text, chatKey);
+          processedMessage = { ...messageData, text: decryptedText, decrypted: true };
+        } catch (error) {
+          console.error('Ошибка расшифровки сообщения:', error);
+          processedMessage = { ...messageData, decryptError: true };
+        }
+      }
+      
+      // Добавляем сообщение в список
+      setMessages(prev => [...prev, processedMessage]);
+    }
+    
+    // Обновляем информацию о последнем сообщении в списке чатов
+    setChats(prev => prev.map(chat => {
+      if (chat.id === messageData.chatId) {
+        return {
+          ...chat,
+          lastMessage: messageData.text, // Здесь можно показать "[Зашифрованное сообщение]" для зашифрованных
+          lastMessageTime: messageData.timestamp,
+          unreadCount: chat.unreadCount + (messageData.senderId !== user?.id ? 1 : 0)
+        };
+      }
+      return chat;
+    }));
+  };
+
+  // Обработка обмена ключами
+  const handleKeyExchange = async (data) => {
+    // TODO: Реализовать обмен ключами
+    console.log('Получен запрос на обмен ключами:', data);
+  };
 
   // Отправка сообщения
-  const sendMessage = async (recipientId, content) => {
+  const sendMessage = async (chatId, text) => {
+    if (!isAuthenticated || !chatId || !text.trim()) return;
+    
     try {
-      // Шифруем сообщение перед отправкой (только для WebSocket)
-      const encryptedContent = await encryptionService.encryptMessage(
-        content,
-        recipientId.toString()
-      );
+      // Получаем ключ для чата
+      const chatKey = await getChatKey(chatId);
       
-      // Пробуем отправить через HTTP API
-      const result = await messagesApi.sendMessage(
-        parseInt(recipientId),
-        content, // Не шифруем для HTTP - сервер сохранит как есть
-        token
-      );
+      // Шифруем сообщение
+      const encryptedText = await encryptMessage(text, chatKey);
       
-      // Если успешно, добавляем сообщение в локальное состояние
-      if (result) {
-        setMessages(prevMessages => {
-          const conversationId = recipientId.toString();
-          const conversationMessages = prevMessages[conversationId] || [];
-          
+      // Создаем временное сообщение для отображения
+      const tempId = 'temp-' + Date.now();
+      const tempMessage = {
+        id: tempId,
+        chatId,
+        senderId: user.id,
+        text,
+        timestamp: new Date().toISOString(),
+        status: 'sending',
+        decrypted: true // Уже расшифровано, так как мы его создали
+      };
+      
+      // Добавляем в список сообщений
+      setMessages(prev => [...prev, tempMessage]);
+      
+      // Отправляем зашифрованное сообщение
+      const response = await sendMessageApi({
+        chatId,
+        text: encryptedText,
+        encrypted: true
+      });
+      
+      // Обновляем временное сообщение
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === tempId) {
           return {
-            ...prevMessages,
-            [conversationId]: [
-              ...conversationMessages,
-              {
-                id: result.id || Math.random().toString(36).substr(2, 9),
-                sender_id: currentUser.id,
-                recipient_id: parseInt(recipientId),
-                content: content,
-                is_read: false,
-                created_at: result.created_at || new Date().toISOString()
-              }
-            ]
+            ...msg,
+            id: response.id,
+            status: 'sent',
+            timestamp: response.timestamp
           };
-        });
-        
-        // Обновляем список разговоров
-        setConversations(prevConversations => {
-          const conversationIndex = prevConversations.findIndex(
-            c => c.id === recipientId.toString()
-          );
-          
-          if (conversationIndex >= 0) {
-            // Обновляем существующий разговор
-            const updatedConversations = [...prevConversations];
-            updatedConversations[conversationIndex] = {
-              ...updatedConversations[conversationIndex],
-              lastMessage: content,
-              lastMessageTime: new Date().toISOString()
-            };
-            return updatedConversations;
-          } else {
-            // Создаем новый разговор
-            return [
-              ...prevConversations,
-              {
-                id: recipientId.toString(),
-                name: `Пользователь ${recipientId}`,
-                lastMessage: content,
-                lastMessageTime: new Date().toISOString()
-              }
-            ];
-          }
-        });
-        
-        // Если HTTP запрос успешен, но соединение WebSocket тоже есть,
-        // дублируем отправку через WebSocket для real-time обновления
-        if (connected) {
-          websocketService.sendMessage({
-            type: 'text',
-            content: {
-              recipient_id: parseInt(recipientId),
-              content: encryptedContent
-            }
-          });
         }
-        
-        return true;
-      }
+        return msg;
+      }));
       
-      return false;
+      // Обновляем информацию о последнем сообщении в списке чатов
+      setChats(prev => prev.map(chat => {
+        if (chat.id === chatId) {
+          return {
+            ...chat,
+            lastMessage: text,
+            lastMessageTime: response.timestamp
+          };
+        }
+        return chat;
+      }));
+      
+      return response;
     } catch (error) {
       console.error('Ошибка отправки сообщения:', error);
-      return false;
+      
+      // Помечаем сообщение как ошибочное
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === 'temp-' + Date.now()) {
+          return { ...msg, status: 'error' };
+        }
+        return msg;
+      }));
+      
+      throw error;
     }
   };
 
-  // Инициирование звонка
-  const initiateCall = async (recipientId) => {
-    // Реализация инициирования звонка
-  };
-
-  // Ответ на звонок
-  const answerCall = async () => {
-    // Реализация ответа на звонок
-  };
-
-  // Завершение звонка
-  const endCall = () => {
-    // Реализация завершения звонка
+  // Создание нового чата (с обменом ключами)
+  const createChat = async (userId) => {
+    // TODO: Реализовать создание чата с обменом ключами
   };
 
   const value = {
-    connected,
-    conversations,
-    activeConversation,
+    chats,
+    activeChat,
+    setActiveChat,
     messages,
-    callState,
-    setActiveConversation,
+    loading,
+    loadChats,
+    loadMessages,
     sendMessage,
-    initiateCall,
-    answerCall,
-    endCall
+    createChat
   };
 
   return (

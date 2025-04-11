@@ -1,0 +1,125 @@
+.admin-panel {
+  background-color: #f8f9fa;
+  min-height: 100vh;
+}
+
+.admin-header {
+  background-color: #343a40;
+  color: white;
+}
+
+.admin-title {
+  font-size: 1.5rem;
+  margin: 0;
+}
+
+.admin-sidebar {
+  background-color: #f0f2f5;
+  padding: 1rem;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  border-right: 1px solid #dee2e6;
+  min-height: calc(100vh - 60px);
+}
+
+.admin-sidebar .nav-link {
+  color: #495057;
+  border-radius: 0;
+  margin-bottom: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.admin-sidebar .nav-link:hover {
+  background-color: #e9ecef;
+}
+
+.admin-sidebar .nav-link.active {
+  background-color: #0d6efd;
+  color: white;
+}
+
+.admin-content {
+  padding: 1.5rem;
+  background-color: white;
+  min-height: calc(100vh - 60px);
+}
+
+/* Стили для списка пользователей */
+.user-actions .btn {
+  margin-right: 0.5rem;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 5px;
+}
+
+.status-active {
+  background-color: #28a745;
+}
+
+.status-blocked {
+  background-color: #dc3545;
+}
+
+.status-pending {
+  background-color: #ffc107;
+}
+
+/* Стили для форм */
+.form-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  border: 1px solid #dee2e6;
+  border-radius: 0.25rem;
+  background-color: #f8f9fa;
+}
+
+.form-section h3 {
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+/* Стили для статистики */
+.stat-card {
+  text-align: center;
+  background-color: white;
+  padding: 1.5rem;
+  border-radius: 0.25rem;
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  margin-bottom: 1.5rem;
+  transition: transform 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+}
+
+.stat-card .stat-icon {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  color: #0d6efd;
+}
+
+.stat-card .stat-value {
+  font-size: 2rem;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+
+.stat-card .stat-label {
+  font-size: 1rem;
+  color: #6c757d;
+}
+
+/* Стили для графиков */
+.chart-container {
+  background-color: white;
+  padding: 1.5rem;
+  border-radius: 0.25rem;
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  margin-bottom: 1.5rem;
+} 

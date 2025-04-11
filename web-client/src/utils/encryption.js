@@ -1,214 +1,163 @@
-import CryptoJS from 'crypto-js';
-import * as sodium from 'libsodium-wrappers';
+/**
+ * ВНИМАНИЕ: Этот файл является заглушкой. E2EE больше не используется.
+ * Вместо этого используется серверное шифрование (SSE) + TLS.
+ * 
+ * Этот файл оставлен только для обратной совместимости с импортами.
+ */
 
 /**
- * Сервис для шифрования сообщений
- * Реализует E2EE (End-to-End Encryption) с использованием libsodium для создания ключей
- * и CryptoJS для шифрования.
+ * Заглушка для шифрования
+ * 
+ * ПРИМЕЧАНИЕ: Эта реализация является ЗАГЛУШКОЙ и НЕ выполняет никакого шифрования.
+ * Вместо E2EE используется комбинация TLS и серверного шифрования (SSE).
  */
+
+// Выводим предупреждение в консоль о заглушке
+console.warn(
+  'ВНИМАНИЕ: Модуль E2EE заменен заглушкой! ' +
+  'Сквозное шифрование отключено в пользу TLS + SSE (серверного шифрования)'
+);
+
 class EncryptionService {
   constructor() {
-    this.initialized = false;
-    this.keys = {}; // Хранилище ключей для разных пользователей
-    this.keyPrefix = 'chat_key_'; // Префикс для ключей в localStorage
+    this.initialized = true;
+    console.log('EncryptionService: инициализирован (заглушка)');
   }
 
   /**
-   * Инициализация сервиса шифрования
+   * Заглушка: просто возвращает сообщение без изменений
    */
-  async init() {
-    if (this.initialized) return;
-    
-    try {
-      // Инициализация libsodium
-      await sodium.ready;
-      
-      // Восстанавливаем ключи из localStorage
-      this.loadKeysFromStorage();
-      
-      this.initialized = true;
-      console.log('Encryption: сервис шифрования инициализирован');
-    } catch (error) {
-      console.error('Encryption: ошибка при инициализации сервиса шифрования', error);
-    }
+  encryptMessage(message) {
+    console.warn('EncryptionService: используется заглушка вместо шифрования');
+    return message;
   }
 
   /**
-   * Загрузка ключей из localStorage
-   * @private
+   * Заглушка: просто возвращает сообщение без изменений
    */
-  loadKeysFromStorage() {
-    const keys = {};
-    
-    // Получаем все ключи из localStorage, начинающиеся с префикса
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(this.keyPrefix)) {
-        const userId = key.replace(this.keyPrefix, '');
-        keys[userId] = localStorage.getItem(key);
-      }
-    }
-    
-    this.keys = keys;
+  decryptMessage(message) {
+    console.warn('EncryptionService: используется заглушка вместо дешифрования');
+    return message;
   }
 
   /**
-   * Сохранение ключа в localStorage
-   * @param {string} userId - ID пользователя
-   * @param {string} key - Ключ шифрования
-   * @private
+   * Заглушка: просто возвращает файл без изменений
    */
-  saveKeyToStorage(userId, key) {
-    localStorage.setItem(`${this.keyPrefix}${userId}`, key);
+  encryptFile(file) {
+    console.warn('EncryptionService: используется заглушка вместо шифрования файла');
+    return Promise.resolve(file);
   }
 
   /**
-   * Получение ключа для пользователя
-   * Если ключа нет, генерируем новый
-   * @param {string} userId - ID пользователя
-   * @returns {string} Ключ шифрования
+   * Заглушка: просто возвращает файл без изменений
    */
-  async getKeyForUser(userId) {
-    await this.ensureInitialized();
-    
-    if (!this.keys[userId]) {
-      // Генерируем новый ключ
-      const key = this.generateKey();
-      this.keys[userId] = key;
-      this.saveKeyToStorage(userId, key);
-    }
-    
-    return this.keys[userId];
+  decryptFile(file) {
+    console.warn('EncryptionService: используется заглушка вместо дешифрования файла');
+    return Promise.resolve(file);
   }
 
   /**
-   * Генерация нового случайного ключа
-   * @returns {string} Новый ключ
-   * @private
+   * Заглушка: генерирует фиктивный ключ (не используется)
    */
   generateKey() {
-    // Генерируем случайный ключ с помощью libsodium
-    const key = sodium.randombytes_buf(sodium.crypto_secretbox_KEYBYTES);
-    // Преобразуем в Base64 для хранения
-    return sodium.to_base64(key);
+    console.warn('EncryptionService: запрошена генерация ключа (заглушка)');
+    return Promise.resolve('fake-key-12345');
   }
 
   /**
-   * Шифрование сообщения
-   * @param {string} message - Сообщение для шифрования
-   * @param {string} recipientId - ID получателя
-   * @returns {Promise<string>} Зашифрованное сообщение
+   * Заглушка: возвращает фиктивный ключ (не используется)
    */
-  async encryptMessage(message, recipientId) {
-    // В реальном приложении здесь должно быть настоящее шифрование
-    // Например, с использованием OpenPGP.js или другой библиотеки E2E шифрования
-    
-    // Для демонстрации просто используем Base64
-    return btoa(message);
-  }
-  
-  /**
-   * Расшифровка сообщения
-   * @param {string} encryptedMessage - Зашифрованное сообщение
-   * @param {string} senderId - ID отправителя
-   * @returns {Promise<string>} Расшифрованное сообщение
-   */
-  async decryptMessage(encryptedMessage, senderId) {
-    // В реальном приложении здесь должна быть настоящая расшифровка
-    
-    try {
-      // Для демонстрации просто используем Base64
-      return atob(encryptedMessage);
-    } catch (error) {
-      console.error('Ошибка расшифровки:', error);
-      return '[Ошибка расшифровки сообщения]';
-    }
+  getPublicKey() {
+    console.warn('EncryptionService: запрошен публичный ключ (заглушка)');
+    return 'fake-public-key-12345';
   }
 
   /**
-   * Шифрование данных файла
-   * @param {File} file - Файл для шифрования
-   * @param {string} recipientId - ID получателя
-   * @returns {Promise<{name: string, type: string, size: number, data: string}>} 
-   *          Метаданные и зашифрованные данные файла
+   * Заглушка: сохраняет ключ в localStorage (не используется)
    */
-  async encryptFile(file, recipientId) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      
-      reader.onload = async (event) => {
-        try {
-          // Получаем бинарные данные файла
-          const fileData = event.target.result;
-          
-          // В реальном приложении здесь должно быть настоящее шифрование файла
-          // Для демонстрации просто используем Base64
-          const encryptedData = btoa(
-            String.fromCharCode(...new Uint8Array(fileData))
-          );
-          
-          resolve({
-            name: file.name,
-            type: file.type,
-            size: file.size,
-            data: encryptedData
-          });
-        } catch (error) {
-          reject(error);
-        }
-      };
-      
-      reader.onerror = () => {
-        reject(new Error('Ошибка чтения файла'));
-      };
-      
-      // Читаем файл как массив байтов
-      reader.readAsArrayBuffer(file);
-    });
-  }
-  
-  /**
-   * Расшифровка данных файла
-   * @param {Object} encryptedFile - Метаданные и зашифрованные данные файла
-   * @param {string} senderId - ID отправителя
-   * @returns {Promise<Blob>} Расшифрованный файл как Blob
-   */
-  async decryptFile(encryptedFile, senderId) {
-    try {
-      // В реальном приложении здесь должна быть настоящая расшифровка
-      // Для демонстрации просто используем Base64
-      
-      // Декодируем Base64
-      const binaryString = atob(encryptedFile.data);
-      const bytes = new Uint8Array(binaryString.length);
-      
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      
-      // Создаем Blob из расшифрованных данных
-      return new Blob([bytes], { type: encryptedFile.type });
-    } catch (error) {
-      console.error('Ошибка расшифровки файла:', error);
-      throw error;
-    }
+  storeKey(keyData) {
+    console.warn('EncryptionService: запрошено сохранение ключа (заглушка)');
+    localStorage.setItem('fake_key', JSON.stringify({
+      timestamp: new Date().toISOString(),
+      keyId: 'fake-key-id'
+    }));
+    return Promise.resolve(true);
   }
 
   /**
-   * Проверка и инициализация сервиса при необходимости
-   * @private
+   * Заглушка: проверяет наличие фиктивного ключа
    */
-  async ensureInitialized() {
-    if (!this.initialized) {
-      await this.init();
-    }
+  hasKey() {
+    return !!localStorage.getItem('fake_key');
+  }
+
+  /**
+   * Заглушка: импорт ключа (всегда успешен)
+   */
+  importKey(keyData) {
+    console.warn('EncryptionService: запрошен импорт ключа (заглушка)');
+    localStorage.setItem('fake_key', JSON.stringify({
+      timestamp: new Date().toISOString(),
+      keyId: 'imported-fake-key'
+    }));
+    return Promise.resolve(true);
   }
 }
 
-// Создаем синглтон для использования во всем приложении
-const encryptionService = new EncryptionService();
+// Экспортируем экземпляр сервиса
+export default new EncryptionService();
 
-// Инициализируем сервис сразу при импорте
-encryptionService.init();
+// Заглушки для дополнительных функций
+export async function generateKeyPair() {
+  console.warn('generateKeyPair: E2EE больше не используется.');
+  return { publicKey: {}, privateKey: {} };
+}
 
-export default encryptionService;
+export async function deriveSharedSecret() {
+  console.warn('deriveSharedSecret: E2EE больше не используется.');
+  return '';
+}
+
+export async function encryptMessage(message) {
+  console.warn('encryptMessage: E2EE больше не используется.');
+  return message;
+}
+
+export async function decryptMessage(message) {
+  console.warn('decryptMessage: E2EE больше не используется.');
+  return message;
+}
+
+export const generateRegistrationId = async () => {
+  console.warn('generateRegistrationId: E2EE больше не используется.');
+  return 0;
+};
+
+export const generatePreKeys = async () => {
+  console.warn('generatePreKeys: E2EE больше не используется.');
+  return [];
+};
+
+export const generateSignedPreKey = async () => {
+  console.warn('generateSignedPreKey: E2EE больше не используется.');
+  return {};
+};
+
+export const initSignalProtocol = async () => {
+  console.warn('initSignalProtocol: E2EE больше не используется.');
+  return {};
+};
+
+export const createSession = async () => {
+  console.warn('createSession: E2EE больше не используется.');
+  return {};
+};
+
+export const getOrCreateSession = async () => {
+  console.warn('getOrCreateSession: E2EE больше не используется.');
+  return {};
+};
+
+export const clearSignalData = () => {
+  console.warn('clearSignalData: E2EE больше не используется.');
+};
