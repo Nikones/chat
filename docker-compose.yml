@@ -18,7 +18,7 @@ services:
       - redis
     environment:
       - DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASSWORD:-postgres12345!}@db:5432/${DB_NAME:-messenger}?sslmode=disable
-      - JWT_SECRET=${JWT_SECRET:-gp2Ju8PPFTvLA4WRbDDNF5jUQ2sX7KcP}
+      - JWT_SECRET=${JWT_SECRET:-gp2Ju8PPFTvLA4WRbDDNF5jUQ2sX7KcPBh67VwnM34LkR9ZsSxDqE5tU8X2aYcFG}
       - DB_HOST=${DB_HOST:-db}
       - DB_PORT=${DB_PORT:-5432}
       - DB_USER=${DB_USER:-postgres}
@@ -32,8 +32,8 @@ services:
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-devsecret123}
       - LIVEKIT_URL=${LIVEKIT_URL:-ws://livekit:7880}
-      - SSE_KEY_BASE64=${SSE_KEY_BASE64:-M3pjL1YwdURHbVgrQkRFdlhMRDZ1VzhxT1FFUG1WdmV0THRnZU8yYUhMWT0=}
-      - SERVER_ENCRYPTION_KEY=${SSE_KEY_BASE64:-M3pjL1YwdURHbVgrQkRFdlhMRDZ1VzhxT1FFUG1WdmV0THRnZU8yYUhMWT0=}
+      - SSE_KEY_BASE64=bTEvUHlYQ0VlbWVaZUJENUh2aUpKWGQ2V2JTQzl5d20=
+      - SERVER_ENCRYPTION_KEY=bTEvUHlYQ0VlbWVaZUJENUh2aUpKWGQ2V2JTQzl5d20=
       - REDIS_ENABLED=true
       - LOG_LEVEL=${LOG_LEVEL:-debug}
       - LOG_JSON=${LOG_JSON:-true}
