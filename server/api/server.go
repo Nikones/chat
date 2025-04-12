@@ -252,6 +252,13 @@ func (s *Server) setupRoutes() {
 
 		// WebSocket для чата и звонков
 		auth.GET("/ws", s.handleWebSocket)
+
+		// Администраторские маршруты
+		auth.GET("/admin/users", s.handleAdminGetUsers)
+		auth.GET("/admin/settings", s.handleAdminGetSettings)
+		auth.PUT("/admin/settings", s.handleAdminUpdateSettings)
+		auth.PUT("/admin/users/:id", s.handleAdminUpdateUser)
+		auth.DELETE("/admin/users/:id", s.handleAdminDeleteUser)
 	}
 
 	// Логирование всех доступных маршрутов

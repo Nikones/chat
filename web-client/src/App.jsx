@@ -141,12 +141,12 @@ const AppRoutes = () => {
     } catch (error) {
       console.error('App: Ошибка при проверке статуса системы:', error);
       
-      // При любой ошибке считаем систему инициализированной
+      // При любой ошибке считаем систему инициализированной (предотвращаем бесконечные редиректы)
       setSystemState({
         checked: true,
         initialized: true,
         loading: false,
-        error: null
+        error: error.message
       });
       
       return true;
@@ -171,21 +171,6 @@ const AppRoutes = () => {
         <p className="text-muted">Проверка состояния системы...</p>
       </div>
     );
-  }
-  
-  // Если система проверена и она не инициализирована
-  if (systemState.checked && !systemState.initialized) {
-    // И мы не находимся на странице setup, редиректим на нее
-    if (location.pathname !== '/setup') {
-      console.log('App: Система не инициализирована, редирект на /setup');
-      return <Navigate to="/setup" replace />;
-    }
-  }
-  
-  // Если система инициализирована и мы на странице setup - редирект на логин
-  if (systemState.initialized && location.pathname === '/setup') {
-    console.log('App: Система инициализирована, редирект с /setup на /login');
-    return <Navigate to="/login" replace />;
   }
   
   // Возвращаем базовую конфигурацию маршрутов
@@ -215,9 +200,7 @@ const AppRoutes = () => {
         {/* Защищенные маршруты внутри Layout */}
         <Route path="/" element={
           <PrivateRouteWrapper>
-            <WebSocketWrapper>
-              <Layout />
-            </WebSocketWrapper>
+            <Layout />
           </PrivateRouteWrapper>
         }>
           <Route index element={<Chat />} />
@@ -297,7 +280,9 @@ const AppWithProviders = () => {
           <WebSocketProvider>
             <MessageProvider>
               <CallProvider>
-                <AppRoutes />
+                <WebSocketWrapper>
+                  <AppRoutes />
+                </WebSocketWrapper>
               </CallProvider>
             </MessageProvider>
           </WebSocketProvider>

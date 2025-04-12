@@ -1,25 +1,23 @@
-import { API_URL } from '../config';
-import { getCsrfToken } from '../utils/auth';
+import axios from 'axios';
+import apiInstance from './apiInstance';
 
 // Получение списка всех пользователей
 export async function getUsers() {
   try {
-    const response = await fetch(`${API_URL}/api/admin/users`, {
-      method: 'GET',
+    console.log('Запрос списка пользователей');
+    // Получаем токен из localStorage
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Требуется авторизация');
+    }
+    
+    const response = await apiInstance.get('/admin/users', {
       headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': getCsrfToken(),
-      },
-      credentials: 'include',
+        'Authorization': `Bearer ${token}`
+      }
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Ошибка при получении списка пользователей');
-    }
-
-    const data = await response.json();
-    return data;
+    return response.data;
   } catch (error) {
     console.error('Ошибка при получении списка пользователей:', error);
     throw error;
@@ -29,23 +27,18 @@ export async function getUsers() {
 // Создание нового пользователя
 export async function createUser(userData) {
   try {
-    const response = await fetch(`${API_URL}/api/admin/users`, {
-      method: 'POST',
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Требуется авторизация');
+    }
+    
+    const response = await apiInstance.post('/admin/users', userData, {
       headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': getCsrfToken(),
-      },
-      credentials: 'include',
-      body: JSON.stringify(userData),
+        'Authorization': `Bearer ${token}`
+      }
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Ошибка при создании пользователя');
-    }
-
-    const data = await response.json();
-    return data;
+    return response.data;
   } catch (error) {
     console.error('Ошибка при создании пользователя:', error);
     throw error;
@@ -55,23 +48,18 @@ export async function createUser(userData) {
 // Обновление данных пользователя
 export async function updateUser(userId, userData) {
   try {
-    const response = await fetch(`${API_URL}/api/admin/users/${userId}`, {
-      method: 'PUT',
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Требуется авторизация');
+    }
+    
+    const response = await apiInstance.put(`/admin/users/${userId}`, userData, {
       headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': getCsrfToken(),
-      },
-      credentials: 'include',
-      body: JSON.stringify(userData),
+        'Authorization': `Bearer ${token}`
+      }
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Ошибка при обновлении пользователя');
-    }
-
-    const data = await response.json();
-    return data;
+    return response.data;
   } catch (error) {
     console.error('Ошибка при обновлении пользователя:', error);
     throw error;
@@ -81,21 +69,18 @@ export async function updateUser(userId, userData) {
 // Удаление пользователя
 export async function deleteUser(userId) {
   try {
-    const response = await fetch(`${API_URL}/api/admin/users/${userId}`, {
-      method: 'DELETE',
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Требуется авторизация');
+    }
+    
+    const response = await apiInstance.delete(`/admin/users/${userId}`, {
       headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': getCsrfToken(),
-      },
-      credentials: 'include',
+        'Authorization': `Bearer ${token}`
+      }
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Ошибка при удалении пользователя');
-    }
-
-    return true;
+    return response.data;
   } catch (error) {
     console.error('Ошибка при удалении пользователя:', error);
     throw error;
@@ -105,22 +90,18 @@ export async function deleteUser(userId) {
 // Блокировка пользователя
 export async function blockUser(userId) {
   try {
-    const response = await fetch(`${API_URL}/api/admin/users/${userId}/block`, {
-      method: 'POST',
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Требуется авторизация');
+    }
+    
+    const response = await apiInstance.post(`/admin/users/${userId}/block`, {}, {
       headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': getCsrfToken(),
-      },
-      credentials: 'include',
+        'Authorization': `Bearer ${token}`
+      }
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Ошибка при блокировке пользователя');
-    }
-
-    const data = await response.json();
-    return data;
+    return response.data;
   } catch (error) {
     console.error('Ошибка при блокировке пользователя:', error);
     throw error;
@@ -130,22 +111,18 @@ export async function blockUser(userId) {
 // Разблокировка пользователя
 export async function unblockUser(userId) {
   try {
-    const response = await fetch(`${API_URL}/api/admin/users/${userId}/unblock`, {
-      method: 'POST',
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Требуется авторизация');
+    }
+    
+    const response = await apiInstance.post(`/admin/users/${userId}/unblock`, {}, {
       headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': getCsrfToken(),
-      },
-      credentials: 'include',
+        'Authorization': `Bearer ${token}`
+      }
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Ошибка при разблокировке пользователя');
-    }
-
-    const data = await response.json();
-    return data;
+    return response.data;
   } catch (error) {
     console.error('Ошибка при разблокировке пользователя:', error);
     throw error;
@@ -155,22 +132,18 @@ export async function unblockUser(userId) {
 // Получение системных настроек
 export async function getSystemSettings() {
   try {
-    const response = await fetch(`${API_URL}/api/admin/settings`, {
-      method: 'GET',
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Требуется авторизация');
+    }
+    
+    const response = await apiInstance.get('/admin/settings', {
       headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': getCsrfToken(),
-      },
-      credentials: 'include',
+        'Authorization': `Bearer ${token}`
+      }
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Ошибка при получении системных настроек');
-    }
-
-    const data = await response.json();
-    return data;
+    return response.data;
   } catch (error) {
     console.error('Ошибка при получении системных настроек:', error);
     throw error;
@@ -180,23 +153,18 @@ export async function getSystemSettings() {
 // Обновление системных настроек
 export async function updateSystemSettings(settings) {
   try {
-    const response = await fetch(`${API_URL}/api/admin/settings`, {
-      method: 'PUT',
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Требуется авторизация');
+    }
+    
+    const response = await apiInstance.put('/admin/settings', settings, {
       headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': getCsrfToken(),
-      },
-      credentials: 'include',
-      body: JSON.stringify(settings),
+        'Authorization': `Bearer ${token}`
+      }
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Ошибка при обновлении системных настроек');
-    }
-
-    const data = await response.json();
-    return data;
+    return response.data;
   } catch (error) {
     console.error('Ошибка при обновлении системных настроек:', error);
     throw error;

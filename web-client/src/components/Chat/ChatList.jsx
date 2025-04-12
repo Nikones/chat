@@ -32,6 +32,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import authApi from '../../api/auth';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ru } from 'date-fns/locale';
+import { useWebSocket } from '../../contexts/WebSocketContext';
 
 // Стилизованный поиск
 const Search = styled('div')(({ theme }) => ({
@@ -90,6 +91,7 @@ const ChatList = ({ onSelectChat }) => {
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [error, setError] = useState('');
+  const { isConnected } = useWebSocket();
 
   // Загрузка списка пользователей
   useEffect(() => {
@@ -173,28 +175,27 @@ const ChatList = ({ onSelectChat }) => {
   };
 
   return (
-    <>
-      <Toolbar 
-        sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'space-between',
-          px: [1],
-          borderBottom: '1px solid rgba(0, 0, 0, 0.12)'
-        }}
-      >
-        <Typography variant="h6" component="div">
-          Чаты
-        </Typography>
-        <IconButton 
-          color="primary" 
-          edge="end" 
-          onClick={() => setNewChatDialogOpen(true)}
-          aria-label="создать новый чат"
-        >
-          <AddIcon />
-        </IconButton>
-      </Toolbar>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h6">Чаты</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Box 
+            sx={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              backgroundColor: isConnected ? 'success.main' : 'error.main',
+              mr: 1
+            }}
+          />
+          <Typography variant="caption" color="text.secondary">
+            {isConnected ? 'Подключено' : 'Отключено'}
+          </Typography>
+          <IconButton size="small" onClick={() => setNewChatDialogOpen(true)}>
+            <AddIcon />
+          </IconButton>
+        </Box>
+      </Box>
       
       <Box sx={{ px: 2, py: 1 }}>
         <Search>
@@ -341,7 +342,7 @@ const ChatList = ({ onSelectChat }) => {
           </Button>
         </DialogActions>
       </Dialog>
-    </>
+    </Box>
   );
 };
 

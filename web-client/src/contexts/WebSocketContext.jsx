@@ -1,182 +1,172 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { toast } from 'react-toastify';
 import { useAuth } from './AuthContext';
-import wsService from '../utils/websocket';
+import { toast } from 'react-toastify';
 
-// Создаем контекст для WebSocket
-const WebSocketContext = createContext();
+// Создаем контекст с начальными значениями
+const WebSocketContext = createContext({
+  socket: null,
+  isConnected: false,
+  sendMessage: () => false,
+  setMessageHandler: () => {},
+  ready: false,
+  error: null
+});
 
-// Хук для использования контекста в компонентах
-export const useWebSocket = () => useContext(WebSocketContext);
+export const useWebSocket = () => {
+  const context = useContext(WebSocketContext);
+  if (!context) {
+    throw new Error('useWebSocket должен использоваться внутри WebSocketProvider');
+  }
+  return context;
+};
 
 export const WebSocketProvider = ({ children }) => {
-  const { token, isAuthenticated, logout } = useAuth();
-  const [connected, setConnected] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const { token, isAuthenticated } = useAuth();
+  const [socket, setSocket] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [error, setError] = useState(null);
+  const [ready, setReady] = useState(false);
+  const maxReconnectAttempts = 5;
+  const reconnectDelay = 3000;
 
-  // Обработчик сообщений от WebSocket
-  const handleMessage = useCallback((data) => {
-    console.log('WebSocketContext: получено сообщение', data);
-    
-    // Обрабатываем различные типы сообщений
-    if (data.type === 'error') {
-      toast.error(data.message || 'Произошла ошибка');
+  // Создание и настройка WebSocket соединения
+  const connect = useCallback(() => {
+    // Если нет авторизации или токена, не подключаемся
+    if (!isAuthenticated || !token) {
+      setReady(false);
+      return;
     }
-  }, []);
 
-  // Обработчик подключения
-  const handleConnect = useCallback(() => {
-    console.log('WebSocketContext: соединение установлено');
-    setConnected(true);
-    setLoading(false);
-    setError(null);
-  }, []);
-
-  // Обработчик отключения
-  const handleDisconnect = useCallback((event) => {
-    console.log('WebSocketContext: соединение закрыто', event);
-    setConnected(false);
-    
-    // Если код 1000, это чистое закрытие (например, при выходе пользователя)
-    if (event.code !== 1000) {
-      // Автоматически пытаемся переподключиться
-      setLoading(true);
+    // Закрываем предыдущее соединение, если оно существует
+    if (socket) {
+      socket.close();
     }
-  }, []);
 
-  // Обработчик ошибок
-  const handleError = useCallback((error) => {
-    console.error('WebSocketContext: ошибка соединения', error);
-    setError('Ошибка WebSocket соединения');
-  }, []);
+    try {
+      // Создаем WebSocket соединение с токеном в URL
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/api/ws?token=${token}`;
+      
+      console.log('WebSocketContext: Подключение к', wsUrl);
+      const ws = new WebSocket(wsUrl);
+      
+      ws.onopen = () => {
+        console.log('WebSocketContext: Соединение установлено');
+        setIsConnected(true);
+        setReconnectAttempt(0);
+        setError(null);
+        setReady(true);
+      };
+      
+      ws.onclose = (event) => {
+        console.log('WebSocketContext: Соединение закрыто:', event);
+        setIsConnected(false);
+        
+        // Попытка переподключения только если это не намеренное закрытие
+        if (!event.wasClean && isAuthenticated && token) {
+          setTimeout(() => {
+            if (reconnectAttempt < maxReconnectAttempts) {
+              setReconnectAttempt(prev => prev + 1);
+              connect();
+            } else {
+              setError('Превышено максимальное количество попыток подключения');
+              setReady(true); // Считаем готовым, хотя и с ошибкой
+              toast.error('Не удалось подключиться к серверу. Попробуйте обновить страницу.');
+            }
+          }, reconnectDelay);
+        } else {
+          setReady(true); // Считаем, что контекст готов, даже если соединение закрыто
+        }
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocketContext: Ошибка соединения:', error);
+        setError('Ошибка WebSocket соединения');
+        ws.close();
+      };
+      
+      setSocket(ws);
+    } catch (error) {
+      console.error('WebSocketContext: Ошибка при создании соединения', error);
+      setError(`Ошибка при создании соединения: ${error.message}`);
+      setReady(true); // Считаем готовым, но с ошибкой
+    }
+  }, [token, isAuthenticated, socket, reconnectAttempt, maxReconnectAttempts, reconnectDelay]);
 
-  // Обработчик превышения лимита попыток переподключения
-  const handleReconnectFailed = useCallback(() => {
-    setLoading(false);
-    setError('Не удалось восстановить соединение. Попробуйте обновить страницу.');
-    toast.error('Соединение с сервером потеряно. Попробуйте обновить страницу.', {
-      autoClose: false,
-    });
-  }, []);
-
-  // Инициализация сервиса при монтировании компонента
+  // Переподключение при изменении токена или аутентификации
   useEffect(() => {
     if (isAuthenticated && token) {
-      console.log('WebSocketContext: инициализация WebSocket с токеном');
-      
-      // Добавляем обработчики событий
-      const handler = {
-        onMessage: handleMessage,
-        onConnect: handleConnect,
-        onDisconnect: handleDisconnect,
-        onError: handleError,
-        onReconnectFailed: handleReconnectFailed
-      };
-      
-      wsService.addMessageHandler(handler);
-      
-      // Инициализируем соединение
-      wsService.init(token);
-      
-      return () => {
-        console.log('WebSocketContext: отключение WebSocket');
-        wsService.removeMessageHandler(handler);
-        wsService.disconnect();
-      };
+      connect();
     } else {
-      // Если пользователь не авторизован, отключаем WebSocket
-      console.log('WebSocketContext: пользователь не авторизован, отключаем WebSocket');
-      wsService.disconnect();
-      setConnected(false);
-      setLoading(false);
-    }
-  }, [
-    token, 
-    isAuthenticated, 
-    handleMessage, 
-    handleConnect, 
-    handleDisconnect, 
-    handleError, 
-    handleReconnectFailed
-  ]);
-
-  // Отправка сообщения в чат
-  const sendMessage = useCallback((chatId, messageContent, messageType = 'text') => {
-    if (!connected) {
-      toast.error('Нет соединения с сервером');
-      return false;
+      // Если пользователь не аутентифицирован, но есть соединение, закрываем его
+      if (socket) {
+        socket.close();
+        setSocket(null);
+        setIsConnected(false);
+      }
+      
+      // Контекст готов даже если соединение не установлено
+      setReady(true);
     }
     
-    if (!messageContent || messageContent.trim() === '') {
-      console.warn('Попытка отправить пустое сообщение');
+    // Очистка при размонтировании компонента
+    return () => {
+      if (socket) {
+        socket.close();
+        setSocket(null);
+      }
+    };
+  }, [token, isAuthenticated, connect, socket]);
+
+  // Функция для отправки сообщений
+  const sendMessage = useCallback((type, payload) => {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      console.error('WebSocketContext: WebSocket не подключен');
       return false;
     }
     
     try {
-      // Создаем сообщение без шифрования
       const message = {
-        type: 'message',
-        content: {
-          chatId,
-          messageType,
-          content: messageContent,
-        }
+        type,
+        payload
       };
       
-      // Отправляем сообщение
-      return wsService.sendMessage(message);
+      socket.send(JSON.stringify(message));
+      return true;
     } catch (error) {
-      console.error('Ошибка при отправке сообщения:', error);
-      toast.error('Не удалось отправить сообщение');
+      console.error('WebSocketContext: Ошибка при отправке сообщения:', error);
       return false;
     }
-  }, [connected]);
+  }, [socket]);
 
-  // Отправка статуса печати
-  const sendTypingStatus = useCallback((chatId, isTyping) => {
-    if (!connected) return false;
+  // Функция установки обработчика сообщений
+  const setMessageHandler = useCallback((callback) => {
+    if (!socket) return;
     
-    const message = {
-      type: 'typing',
-      content: {
-        chatId,
-        isTyping
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        callback(data);
+      } catch (error) {
+        console.error('WebSocketContext: Ошибка при обработке сообщения:', error);
       }
     };
-    
-    return wsService.sendMessage(message);
-  }, [connected]);
+  }, [socket]);
 
-  // Отправка статуса прочтения сообщения
-  const markMessageAsRead = useCallback((messageId, chatId) => {
-    if (!connected) return false;
-    
-    const message = {
-      type: 'read',
-      content: {
-        messageId,
-        chatId
-      }
-    };
-    
-    return wsService.sendMessage(message);
-  }, [connected]);
-
-  const contextValue = {
-    connected,
-    loading,
-    error,
+  // Значение контекста
+  const value = {
+    socket,
+    isConnected,
     sendMessage,
-    sendTypingStatus,
-    markMessageAsRead
+    setMessageHandler,
+    ready,
+    error
   };
 
   return (
-    <WebSocketContext.Provider value={contextValue}>
+    <WebSocketContext.Provider value={value}>
       {children}
     </WebSocketContext.Provider>
   );
-};
-
-export default WebSocketContext; 
+}; 

@@ -81,6 +81,13 @@ export const AuthProvider = ({ children }) => {
         setUser(response.data.user);
         setIsAuthenticated(true);
         setAdmin(response.data.user.role === 'admin');
+        
+        // Обновляем данные пользователя в localStorage
+        localStorage.setItem('user_data', JSON.stringify(response.data.user));
+        
+        // Убедимся, что заголовок точно установлен
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        
         setLoading(false);
         return true;
       } else {
@@ -269,6 +276,11 @@ export const AuthProvider = ({ children }) => {
           // Парсим данные пользователя
           const parsedUser = JSON.parse(userData);
           console.log('AuthContext: Данные пользователя из localStorage:', parsedUser);
+          
+          // Устанавливаем предварительные данные пользователя
+          setUser(parsedUser);
+          setIsAuthenticated(true);
+          setAdmin(parsedUser.role === 'admin');
           
           // Проверяем валидность сессии
           await checkSession();

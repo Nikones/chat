@@ -2,29 +2,19 @@
  * Сервис для работы с WebSocket соединением
  */
 import { toast } from 'react-toastify';
-import { WS_URL, WS_PATH } from '../config';
+import { WS_URL, API_URL } from '../config';
 
 class WebSocketService {
   constructor() {
     this.socket = null;
-    this.token = null;
-    this.messageHandlers = [];
     this.isConnected = false;
-    this.reconnecting = false;
-    this.reconnectCount = 0;
+    this.reconnectAttempts = 0;
+    this.reconnectTimer = null;
     this.maxReconnectAttempts = 5;
-    this.reconnectInterval = 5000; // 5 секунд
-    this.reconnectTimeoutId = null;
-    
-    // Определяем URL для WebSocket
-    // 1. Используем WS_URL, если он задан в config
-    // 2. Иначе строим относительный URL на основе текущего хоста
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const relativeUrl = `${protocol}//${host}${WS_PATH}`;
-    
-    this.wsUrl = WS_URL || relativeUrl;
-    console.log('WebSocketService: URL для подключения:', this.wsUrl);
+    this.baseReconnectDelay = 1000; // начальная задержка 1 секунда
+    this.messageHandlers = [];
+    this.url = process.env.REACT_APP_WS_URL || 'wss://localhost:8000/ws';
+    this.token = null;
   }
 
   /**
@@ -32,80 +22,91 @@ class WebSocketService {
    * @param {string} token - JWT токен для авторизации
    */
   init(token) {
-    console.log('WebSocketService: инициализация с токеном', token ? 'Токен предоставлен' : 'Токен отсутствует');
-    this.token = token;
-    // Если нет токена, не подключаемся
     if (!token) {
-      this.disconnect();
+      console.error('WebSocketService: Попытка инициализации без токена');
       return;
     }
-    
-    // Подключаемся, если не подключены
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-      this.connect();
-    }
+
+    this.token = token;
+    this.connect();
   }
 
   /**
    * Установка соединения WebSocket
    */
   connect() {
-    // Проверяем, есть ли токен для авторизации
-    if (!this.token) {
-      console.warn('WebSocketService: невозможно подключиться без токена авторизации');
-      return;
-    }
-
-    // Предотвращаем повторные попытки подключения
-    if (this.socket && (this.socket.readyState === WebSocket.CONNECTING || this.socket.readyState === WebSocket.OPEN)) {
-      console.log('WebSocketService: соединение уже установлено или в процессе установки');
-      return;
+    // Отключаем существующее соединение, если оно есть
+    if (this.socket) {
+      this.disconnect();
     }
 
     try {
-      // Формируем URL с токеном авторизации
-      const url = `${this.wsUrl}?token=${this.token}`;
-      console.log(`WebSocketService: подключение к ${this.wsUrl}`);
-      
-      // Создаем новое соединение
+      const url = `${this.url}?token=${encodeURIComponent(this.token)}`;
       this.socket = new WebSocket(url);
-      
-      // Настраиваем обработчики событий
-      this.socket.onopen = this.handleOpen.bind(this);
-      this.socket.onmessage = this.handleMessage.bind(this);
-      this.socket.onclose = this.handleClose.bind(this);
-      this.socket.onerror = this.handleError.bind(this);
+      this.setupEventListeners();
     } catch (error) {
-      console.error('WebSocketService: ошибка при создании WebSocket соединения:', error);
+      console.error('WebSocketService: Ошибка при создании соединения', error);
+      this.notifyHandlers('onError', error);
       this.scheduleReconnect();
     }
   }
 
-  /**
-   * Закрытие соединения WebSocket
-   */
-  disconnect() {
-    // Отменяем запланированное переподключение, если оно было
-    if (this.reconnectTimeoutId) {
-      clearTimeout(this.reconnectTimeoutId);
-      this.reconnectTimeoutId = null;
+  // Настройка слушателей событий WebSocket
+  setupEventListeners() {
+    this.socket.onopen = (event) => {
+      console.log('WebSocketService: Соединение открыто');
+      this.isConnected = true;
+      this.reconnectAttempts = 0;
+      this.notifyHandlers('onConnect', event);
+    };
+
+    this.socket.onclose = (event) => {
+      console.log('WebSocketService: Соединение закрыто', event);
+      this.isConnected = false;
+      this.notifyHandlers('onDisconnect', event);
+      
+      // Пытаемся переподключиться только при неожиданном закрытии
+      if (!event.wasClean) {
+        this.scheduleReconnect();
+      }
+    };
+
+    this.socket.onerror = (error) => {
+      console.error('WebSocketService: Ошибка соединения', error);
+      this.notifyHandlers('onError', error);
+    };
+
+    this.socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        console.log('WebSocketService: Получено сообщение', message);
+        this.notifyHandlers('onMessage', message);
+      } catch (error) {
+        console.error('WebSocketService: Ошибка разбора сообщения', error);
+      }
+    };
+  }
+
+  // Запланировать переподключение с экспоненциальной задержкой
+  scheduleReconnect() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
     }
     
-    // Закрываем соединение, если оно открыто
-    if (this.socket) {
-      try {
-        // Только если соединение открыто или в процессе открытия
-        if (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING) {
-          this.socket.close(1000, 'Клиент запросил отключение');
-        }
-      } catch (error) {
-        console.error('WebSocketService: ошибка при закрытии соединения:', error);
-      } finally {
-        this.socket = null;
-        this.isConnected = false;
-        console.log('WebSocketService: соединение закрыто');
-      }
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.log('WebSocketService: Превышено максимальное количество попыток переподключения');
+      this.notifyHandlers('onReconnectFailed');
+      return;
     }
+    
+    // Экспоненциальное увеличение задержки
+    const delay = this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts);
+    console.log(`WebSocketService: Попытка переподключения через ${delay}ms (попытка ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
+    
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectAttempts += 1;
+      this.connect();
+    }, delay);
   }
 
   /**
@@ -114,34 +115,37 @@ class WebSocketService {
    * @returns {boolean} Успешно ли отправлено сообщение
    */
   sendMessage(message) {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-      console.error('WebSocketService: невозможно отправить сообщение - соединение не установлено');
-      toast.error('Ошибка соединения с сервером');
+    if (!this.isConnected || !this.socket) {
+      console.warn('WebSocketService: Попытка отправить сообщение без соединения');
       return false;
     }
     
     try {
-      // Отправляем сообщение без шифрования
-      console.log('WebSocketService: отправка сообщения', message);
-      this.socket.send(JSON.stringify(message));
+      if (typeof message === 'object') {
+        this.socket.send(JSON.stringify(message));
+      } else {
+        this.socket.send(message);
+      }
       return true;
     } catch (error) {
-      console.error('WebSocketService: ошибка при отправке сообщения:', error);
+      console.error('WebSocketService: Ошибка отправки сообщения', error);
       return false;
     }
   }
 
   /**
    * Добавление обработчика для входящих сообщений
-   * @param {Function} handler - Функция обработчик
+   * @param {Object} handler - Объект с функциями обработчиками
    */
   addMessageHandler(handler) {
-    this.messageHandlers.push(handler);
+    if (typeof handler === 'object') {
+      this.messageHandlers.push(handler);
+    }
   }
 
   /**
    * Удаление обработчика для входящих сообщений
-   * @param {Function} handler - Функция обработчик
+   * @param {Object} handler - Объект с функциями обработчиками
    */
   removeMessageHandler(handler) {
     const index = this.messageHandlers.indexOf(handler);
@@ -150,120 +154,34 @@ class WebSocketService {
     }
   }
 
-  /**
-   * Обработчик события открытия соединения
-   * @private
-   */
-  handleOpen(event) {
-    console.log('WebSocketService: соединение установлено');
-    this.isConnected = true;
-    this.reconnectCount = 0; // Сбрасываем счетчик переподключений при успешном соединении
-    
-    // Оповещаем всех подписчиков о подключении
+  // Уведомление всех обработчиков о событии
+  notifyHandlers(eventName, data) {
     this.messageHandlers.forEach(handler => {
-      if (handler.onConnect) {
-        handler.onConnect();
+      if (handler && typeof handler[eventName] === 'function') {
+        handler[eventName](data);
       }
     });
   }
 
   /**
-   * Обработчик события закрытия соединения
-   * @private
+   * Закрытие соединения WebSocket
    */
-  handleClose(event) {
+  disconnect() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+    }
+    
     this.isConnected = false;
-    
-    // Оповещаем всех подписчиков о закрытии соединения
-    this.messageHandlers.forEach(handler => {
-      if (handler.onDisconnect) {
-        handler.onDisconnect(event);
-      }
-    });
-    
-    // Логируем событие закрытия
-    console.log(`WebSocketService: соединение закрыто с кодом ${event.code}${event.reason ? `, причина: ${event.reason}` : ''}`);
-    
-    // Переподключаемся только если это не было чистое закрытие
-    if (event.code !== 1000) {
-      this.scheduleReconnect();
-    }
-  }
-
-  /**
-   * Обработчик ошибок WebSocket
-   * @private
-   */
-  handleError(error) {
-    console.error('WebSocketService: ошибка соединения:', error);
-    
-    // Оповещаем всех подписчиков об ошибке
-    this.messageHandlers.forEach(handler => {
-      if (handler.onError) {
-        handler.onError(error);
-      }
-    });
-    
-    // В случае ошибки обычно WebSocket закрывается, но на всякий случай запланируем переподключение
-    this.scheduleReconnect();
-  }
-
-  /**
-   * Обработчик входящих сообщений
-   * @private
-   */
-  handleMessage(event) {
-    try {
-      console.log('WebSocketService: получено сообщение', event.data);
-      const data = JSON.parse(event.data);
-      
-      // Оповещаем всех подписчиков о новом сообщении
-      this.messageHandlers.forEach(handler => {
-        if (handler.onMessage) {
-          handler.onMessage(data);
-        }
-      });
-    } catch (error) {
-      console.error('WebSocketService: ошибка при обработке сообщения:', error);
-    }
-  }
-
-  /**
-   * Планирование переподключения
-   * @private
-   */
-  scheduleReconnect() {
-    // Предотвращаем множественные таймеры переподключения
-    if (this.reconnecting) return;
-    
-    this.reconnecting = true;
-    this.reconnectCount++;
-    
-    // Проверяем, не превышено ли максимальное количество попыток
-    if (this.reconnectCount > this.maxReconnectAttempts) {
-      console.warn(`WebSocketService: превышено максимальное количество попыток переподключения (${this.maxReconnectAttempts})`);
-      this.reconnecting = false;
-      // Оповещаем всех подписчиков о невозможности переподключения
-      this.messageHandlers.forEach(handler => {
-        if (handler.onReconnectFailed) {
-          handler.onReconnectFailed();
-        }
-      });
-      return;
-    }
-    
-    // Рассчитываем время до следующей попытки с экспоненциальным ростом
-    const delay = Math.min(30000, this.reconnectInterval * Math.pow(1.5, this.reconnectCount - 1));
-    console.log(`WebSocketService: попытка переподключения ${this.reconnectCount} из ${this.maxReconnectAttempts} через ${delay}мс`);
-    
-    // Планируем переподключение
-    this.reconnectTimeoutId = setTimeout(() => {
-      this.reconnecting = false;
-      this.connect();
-    }, delay);
+    console.log('WebSocketService: Соединение отключено');
   }
 }
 
-// Создаем и экспортируем экземпляр сервиса
-const websocketService = new WebSocketService();
-export default websocketService;
+// Создаем и экспортируем единственный экземпляр сервиса
+const wsService = new WebSocketService();
+export default wsService;

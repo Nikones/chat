@@ -15,6 +15,20 @@ const apiInstance = axios.create({
   },
 });
 
+// Перехватчик запросов для добавления токена авторизации
+apiInstance.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 // Проверка статуса инициализации системы
 export const checkSystemInitialization = async () => {
   try {
@@ -75,15 +89,23 @@ apiInstance.interceptors.response.use(
     if (error.response) {
       // Ошибка от сервера
       if (error.response.status === 401) {
-        // Можно добавить логику для перенаправления на страницу входа
-        console.error('Сессия истекла. Пожалуйста, войдите снова');
+        // Проверяем, существует ли токен
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          console.warn('API: Получен 401 несмотря на наличие токена, возможно токен истек');
+          // Можно добавить механизм обновления токена или очистки сессии
+          // localStorage.removeItem('auth_token');
+          // localStorage.removeItem('user_data');
+        } else {
+          console.warn('Требуется авторизация. Токен отсутствует.');
+        }
       }
     } else if (error.request) {
       // Нет ответа от сервера
       console.error('Сервер недоступен. Проверьте подключение к интернету');
     } else {
       // Ошибка при настройке запроса
-      console.error('Ошибка при отправке запроса');
+      console.error('Ошибка при отправке запроса', error);
     }
     
     return Promise.reject(error);

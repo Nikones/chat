@@ -27,6 +27,8 @@ import PersonIcon from '@mui/icons-material/Person';
 import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext';
 import MessageItem from './MessageItem';
+import { useWebSocket } from '../../contexts/WebSocketContext';
+import { toast } from 'react-toastify';
 
 // Популярные эмодзи
 const popularEmojis = [
@@ -48,9 +50,10 @@ const MessageArea = styled(Box)(({ theme }) => ({
   backgroundColor: theme.palette.background.default,
 }));
 
-const ChatWindow = () => {
+const ChatWindow = ({ chat, onNewMessage }) => {
   const { currentUser } = useAuth();
   const { activeConversation, messages, sendMessage, initiateCall } = useChat();
+  const { isConnected, sendTypingStatus, markMessageAsRead } = useWebSocket();
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const messageAreaRef = useRef(null);
@@ -163,6 +166,22 @@ const ChatWindow = () => {
       }
     }
   };
+
+  // Отметка сообщений как прочитанных
+  useEffect(() => {
+    if (!chat || !messages.length || !isConnected) return;
+    
+    // Находим непрочитанные сообщения, которые не от текущего пользователя
+    const unreadMessages = messages.filter(
+      msg => !msg.read && msg.senderId !== currentUser.id
+    );
+    
+    // Отмечаем каждое непрочитанное сообщение как прочитанное
+    unreadMessages.forEach(msg => {
+      markMessageAsRead(msg.id, chat.id);
+    });
+    
+  }, [chat, messages, isConnected, currentUser, markMessageAsRead]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

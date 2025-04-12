@@ -53,7 +53,7 @@ export const AdminProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      const response = await api.get('/api/admin/users');
+      const response = await api.get('/admin/users');
       setUsers(response.data);
     } catch (err) {
       console.error('Ошибка загрузки списка пользователей:', err);
@@ -71,7 +71,7 @@ export const AdminProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      const response = await api.get('/api/admin/settings');
+      const response = await api.get('/admin/settings');
       setSettings(response.data);
     } catch (err) {
       console.error('Ошибка загрузки настроек:', err);
@@ -89,7 +89,7 @@ export const AdminProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      await api.put('/api/admin/settings', newSettings);
+      await api.put('/admin/settings', newSettings);
       setSettings(prev => ({ ...prev, ...newSettings }));
       return true;
     } catch (err) {
@@ -114,7 +114,7 @@ export const AdminProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      const response = await api.post('/api/admin/users', userData);
+      const response = await api.post('/admin/users', userData);
       setUsers(prev => [...prev, response.data]);
       return response.data;
     } catch (err) {
@@ -134,7 +134,7 @@ export const AdminProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      const response = await api.put(`/api/admin/users/${userId}`, userData);
+      const response = await api.put(`/admin/users/${userId}`, userData);
       setUsers(prev => prev.map(user => 
         user.id === userId ? { ...user, ...response.data } : user
       ));
@@ -157,7 +157,7 @@ export const AdminProvider = ({ children }) => {
       setError(null);
       
       const action = blocked ? 'block' : 'unblock';
-      await api.post(`/api/admin/users/${userId}/${action}`);
+      await api.post(`/admin/users/${userId}/${action}`);
       
       setUsers(prev => prev.map(user => 
         user.id === userId ? { ...user, blocked } : user
@@ -181,7 +181,7 @@ export const AdminProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      await api.delete(`/api/admin/users/${userId}`);
+      await api.delete(`/admin/users/${userId}`);
       setUsers(prev => prev.filter(user => user.id !== userId));
       
       return true;
