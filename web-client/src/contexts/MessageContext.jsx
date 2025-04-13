@@ -36,6 +36,7 @@ export const MessageProvider = ({ children }) => {
   // Устанавливаем mountedRef.current = false при размонтировании
   useEffect(() => {
     console.log('MessageContext: Инициализация контекста');
+    mountedRef.current = true;
     return () => {
       console.log('MessageContext: Размонтирование контекста');
       mountedRef.current = false;
@@ -44,8 +45,8 @@ export const MessageProvider = ({ children }) => {
   
   // Обработчик события нового сообщения
   const handleMessageEvent = useCallback((payload) => {
-    if (!payload || !payload.message || !payload.chat_id) {
-      console.error('MessageContext: Некорректный формат сообщения', payload);
+    if (!mountedRef.current || !payload || !payload.message || !payload.chat_id) {
+      console.error('MessageContext: Некорректный формат сообщения или компонент размонтирован', payload);
       return;
     }
     
@@ -77,8 +78,8 @@ export const MessageProvider = ({ children }) => {
   
   // Обработчик события набора текста
   const handleTypingEvent = useCallback((payload) => {
-    if (!payload || !payload.chat_id || typeof payload.user_id === 'undefined') {
-      console.error('MessageContext: Некорректный формат события typing', payload);
+    if (!mountedRef.current || !payload || !payload.chat_id || typeof payload.user_id === 'undefined') {
+      console.error('MessageContext: Некорректный формат события typing или компонент размонтирован', payload);
       return;
     }
     
@@ -108,7 +109,7 @@ export const MessageProvider = ({ children }) => {
   
   // Загрузка сообщений для конкретного чата
   const loadMessages = useCallback(async (chatId) => {
-    if (!isAuthenticated || !chatId) {
+    if (!mountedRef.current || !isAuthenticated || !chatId) {
       console.log(`MessageContext: Пропуск загрузки сообщений. Аутентифицирован: ${isAuthenticated}, chatId: ${chatId}`);
       return;
     }
@@ -139,8 +140,8 @@ export const MessageProvider = ({ children }) => {
   
   // Загрузка списка чатов
   const loadChats = useCallback(async () => {
-    if (!isAuthenticated) {
-      console.log('MessageContext: Пропуск загрузки чатов, пользователь не аутентифицирован');
+    if (!mountedRef.current || !isAuthenticated) {
+      console.log('MessageContext: Пропуск загрузки чатов, пользователь не аутентифицирован или компонент размонтирован');
       return;
     }
     
@@ -157,7 +158,7 @@ export const MessageProvider = ({ children }) => {
       setChats(data);
       
       // Если есть чаты и нет активного, устанавливаем первый чат активным
-      if (data.length > 0 && !activeChat) {
+      if (mountedRef.current && data.length > 0 && !activeChat) {
         console.log(`MessageContext: Установка первого чата (${data[0].id}) как активного`);
         setActiveChat(data[0]);
         loadMessages(data[0].id);
@@ -177,6 +178,8 @@ export const MessageProvider = ({ children }) => {
   
   // Установка активного чата
   const setActiveConversation = useCallback((chatId) => {
+    if (!mountedRef.current) return;
+    
     console.log(`MessageContext: Попытка установить активный чат ${chatId}`);
     const chat = chats.find(c => c.id === chatId);
     if (chat) {
@@ -192,7 +195,7 @@ export const MessageProvider = ({ children }) => {
   useEffect(() => {
     console.log(`MessageContext: Состояние для загрузки чатов - isAuthenticated: ${isAuthenticated}, wsReady: ${wsReady}`);
     
-    if (isAuthenticated && wsReady) {
+    if (isAuthenticated && wsReady && mountedRef.current) {
       console.log('MessageContext: Условия соблюдены, загружаем чаты');
       loadChats();
     } else if (!isAuthenticated) {
@@ -208,8 +211,9 @@ export const MessageProvider = ({ children }) => {
   // Эффект для обработки сообщений через WebSocket
   useEffect(() => {
     // Проверяем все необходимые условия
-    if (!wsReady || !isConnected || !lastMessage?.data) {
+    if (!mountedRef.current || !wsReady || !isConnected || !lastMessage?.data) {
       const missingConditions = [];
+      if (!mountedRef.current) missingConditions.push('компонент размонтирован');
       if (!wsReady) missingConditions.push('WebSocket не готов');
       if (!isConnected) missingConditions.push('WebSocket не подключен');
       if (!lastMessage?.data) missingConditions.push('нет данных сообщения');
@@ -380,24 +384,24 @@ export const MessageProvider = ({ children }) => {
     }
   }, [isAuthenticated]);
   
-  // Значение контекста
-  const value = {
+  // Предоставляем контекст компонентам-потомкам
+  const contextValue = {
     chats,
-    messages,
     activeChat,
+    messages,
     loading,
     error,
     typingUsers,
+    setActiveConversation,
     loadChats,
     loadMessages,
     sendNewMessage,
     sendTypingStatus,
-    setActiveConversation,
     createChat
   };
-  
+
   return (
-    <MessageContext.Provider value={value}>
+    <MessageContext.Provider value={contextValue}>
       {children}
     </MessageContext.Provider>
   );

@@ -13,7 +13,8 @@ class WebSocketService {
     this.maxReconnectAttempts = 5;
     this.baseReconnectDelay = 1000; // начальная задержка 1 секунда
     this.messageHandlers = [];
-    this.url = process.env.REACT_APP_WS_URL || 'wss://localhost:8000/ws';
+    // Используем WS_URL из конфигурации или переменной окружения
+    this.url = WS_URL || process.env.REACT_APP_WS_URL || 'wss://chat.kikita.ru/api/ws';
     this.token = null;
   }
 
@@ -27,8 +28,18 @@ class WebSocketService {
       return;
     }
 
+    console.log('WebSocketService: Инициализация с токеном. Первые 10 символов:', token.substring(0, 10) + '...');
+    console.log('WebSocketService: Длина токена:', token.length);
+    
     this.token = token;
-    this.connect();
+    // Логируем URL WebSocket для отладки
+    console.log('WebSocketService: Инициализация с URL:', this.url);
+    
+    // Добавляем небольшую задержку перед подключением для отладки
+    console.log('WebSocketService: Добавляем задержку в 500мс перед подключением');
+    setTimeout(() => {
+      this.connect();
+    }, 500);
   }
 
   /**
@@ -37,52 +48,97 @@ class WebSocketService {
   connect() {
     // Отключаем существующее соединение, если оно есть
     if (this.socket) {
+      console.log('WebSocketService: Отключаем существующее соединение перед новым подключением');
       this.disconnect();
     }
 
     try {
-      const url = `${this.url}?token=${encodeURIComponent(this.token)}`;
-      this.socket = new WebSocket(url);
+      // Используем базовый URL без токена
+      console.log('WebSocketService: Подключение к', this.url, 'с использованием токена в заголовке');
+      
+      // Создаем объект WebSocket с поддержкой заголовка авторизации
+      this.socket = new WebSocket(this.url, [`token:${this.token}`]);
+      
+      // Для отладки
+      console.log('WebSocketService: WebSocket объект создан. Текущее состояние:', 
+        this.getReadyStateText(this.socket.readyState));
+      
       this.setupEventListeners();
     } catch (error) {
       console.error('WebSocketService: Ошибка при создании соединения', error);
+      console.error('WebSocketService: Тип ошибки:', error.name, 'Сообщение:', error.message);
       this.notifyHandlers('onError', error);
       this.scheduleReconnect();
     }
   }
 
-  // Настройка слушателей событий WebSocket
+  /**
+   * Получение текстового представления состояния WebSocket
+   */
+  getReadyStateText(readyState) {
+    switch(readyState) {
+      case WebSocket.CONNECTING: return 'CONNECTING (0)';
+      case WebSocket.OPEN: return 'OPEN (1)';
+      case WebSocket.CLOSING: return 'CLOSING (2)';
+      case WebSocket.CLOSED: return 'CLOSED (3)';
+      default: return `UNKNOWN (${readyState})`;
+    }
+  }
+
+  /**
+   * Настройка обработчиков событий WebSocket
+   */
   setupEventListeners() {
+    if (!this.socket) {
+      console.error('WebSocketService: Невозможно настроить обработчики для null сокета');
+      return;
+    }
+
     this.socket.onopen = (event) => {
-      console.log('WebSocketService: Соединение открыто');
+      console.log('WebSocketService: Соединение установлено успешно. Детали события:', event);
       this.isConnected = true;
       this.reconnectAttempts = 0;
-      this.notifyHandlers('onConnect', event);
+      this.notifyHandlers('onOpen', event);
     };
 
     this.socket.onclose = (event) => {
-      console.log('WebSocketService: Соединение закрыто', event);
+      console.log('WebSocketService: Соединение закрыто. Детали:', {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean
+      });
       this.isConnected = false;
-      this.notifyHandlers('onDisconnect', event);
-      
-      // Пытаемся переподключиться только при неожиданном закрытии
+      this.notifyHandlers('onClose', event);
+
+      // Если соединение закрыто не "чисто", пытаемся переподключиться
       if (!event.wasClean) {
+        console.log('WebSocketService: Нечистое закрытие соединения, планируем переподключение');
         this.scheduleReconnect();
       }
     };
 
     this.socket.onerror = (error) => {
-      console.error('WebSocketService: Ошибка соединения', error);
+      console.error('WebSocketService: Ошибка соединения:', error);
+      // Дополнительная информация для отладки
+      console.error('WebSocketService: Текущее состояние сокета:', 
+        this.getReadyStateText(this.socket.readyState));
+      
       this.notifyHandlers('onError', error);
     };
 
     this.socket.onmessage = (event) => {
       try {
-        const message = JSON.parse(event.data);
-        console.log('WebSocketService: Получено сообщение', message);
-        this.notifyHandlers('onMessage', message);
+        console.log('WebSocketService: Получено сообщение. Размер данных:', 
+          event.data.length, 'байт');
+          
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        console.log('WebSocketService: Обработано сообщение типа:', 
+          data.type || 'неизвестный тип');
+          
+        this.notifyHandlers('onMessage', data);
       } catch (error) {
-        console.error('WebSocketService: Ошибка разбора сообщения', error);
+        console.error('WebSocketService: Ошибка при обработке сообщения:', error);
+        console.error('WebSocketService: Необработанные данные:', event.data);
       }
     };
   }

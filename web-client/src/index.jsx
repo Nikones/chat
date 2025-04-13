@@ -2,39 +2,51 @@
 import './polyfills/process';
 
 import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-import 'bootstrap/dist/css/bootstrap.min.css';
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import './index.css';
+import App from './App';
 
-// Инициализируем приложение с отложенной загрузкой
-const renderApp = () => {
-  // Находим корневой элемент или создаем его, если не существует
-  let rootEl = document.getElementById('root');
-  if (!rootEl) {
-    rootEl = document.createElement('div');
-    rootEl.id = 'root';
-    document.body.appendChild(rootEl);
-  }
-
-  // Инициализируем React 18 приложение
-  const root = ReactDOM.createRoot(rootEl);
-  
-  // Рендерим приложение со строгим режимом только в процессе разработки
-  if (process.env.NODE_ENV === 'development') {
-    root.render(
-      <React.StrictMode>
-        <App />
-      </React.StrictMode>
-    );
-  } else {
-    root.render(<App />);
-  }
-};
-
-// Запускаем рендеринг когда DOM полностью загружен
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', renderApp);
-} else {
-  renderApp();
+// Включаем подробные предупреждения React в режиме разработки
+if (process.env.NODE_ENV === 'development') {
+  // Устанавливаем полные тексты ошибок вместо минифицированных
+  console.log('🛠️ React запущен в режиме разработки с подробными предупреждениями');
 }
+
+// Импортируем провайдеры контекстов
+import { AuthProvider } from './contexts/AuthContext';
+import { AdminProvider } from './contexts/AdminContext';
+import { WebSocketProvider } from './contexts/WebSocketContext';
+import { MessageProvider } from './contexts/MessageContext';
+import { CallProvider } from './contexts/CallContext';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { ChatProvider } from './contexts/ChatContext';
+
+const root = createRoot(document.getElementById('root'));
+
+// Обратите внимание на порядок вложенности провайдеров:
+// 1. AuthProvider должен быть первым (для аутентификации)
+// 2. WebSocketProvider после него (использует данные аутентификации)
+// 3. MessageProvider после WebSocketProvider (использует WebSocket)
+
+root.render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <ThemeProvider>
+        <AuthProvider>
+          <WebSocketProvider>
+            <AdminProvider>
+              <MessageProvider>
+                <CallProvider>
+                  <ChatProvider>
+                    <App />
+                  </ChatProvider>
+                </CallProvider>
+              </MessageProvider>
+            </AdminProvider>
+          </WebSocketProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </BrowserRouter>
+  </React.StrictMode>
+);

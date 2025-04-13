@@ -1,4 +1,43 @@
 /**
+ * Конфигурационные переменные приложения
+ */
+
+// API URL
+export const API_URL = '/api';
+
+// WebSocket URL (будет использоваться, если не автоматическое определение)
+export const WS_URL = window.location.protocol === 'https:' 
+  ? `wss://${window.location.host}/api/ws` 
+  : `ws://${window.location.host}/api/ws`;
+
+// Версия приложения
+export const APP_VERSION = '0.1.0';
+
+// Задержка между повторными попытками подключения WebSocket (в мс)
+export const WS_RECONNECT_INTERVAL = 3000;
+
+// Максимальное количество попыток повторного подключения WebSocket
+export const WS_MAX_RECONNECT_ATTEMPTS = 5;
+
+// Время жизни токена аутентификации (в днях)
+export const TOKEN_EXPIRY_DAYS = 7;
+
+// Размер страницы при пагинации
+export const PAGE_SIZE = 20;
+
+// Флаг режима разработки
+export const IS_DEV = process.env.NODE_ENV === 'development';
+
+// Логирование в консоль (только в режиме разработки)
+export const logger = {
+  log: (...args) => IS_DEV && console.log(...args),
+  warn: (...args) => IS_DEV && console.warn(...args),
+  error: (...args) => console.error(...args),
+  info: (...args) => IS_DEV && console.info(...args),
+  debug: (...args) => IS_DEV && console.debug(...args),
+};
+
+/**
  * Конфигурация приложения
  */
 
@@ -18,16 +57,8 @@ const getEnvVar = (name, defaultValue = '') => {
   return defaultValue;
 };
 
-// URL API сервера (относительный путь)
-export const API_URL = APP_CONFIG.API_URL || '/api';
-
 // URL базового API
 export const API_BASE_URL = API_URL;
-
-// URL WebSocket сервера
-export const WS_URL = APP_CONFIG.WS_URL || getEnvVar('REACT_APP_WS_URL', '');
-// Путь для WebSocket - относительный
-export const WS_PATH = '/api/ws';
 
 // URL для подключения к медиа-серверу SFU
 export const SFU_URL = APP_CONFIG.LIVEKIT_URL || getEnvVar('REACT_APP_SFU_URL', '');
@@ -84,14 +115,11 @@ export const CALL_CONFIG = {
   autoRejectOnIdle: true, // Автоматический отклонение вызова при неактивности
 };
 
-// Версия приложения
-export const APP_VERSION = '1.0.0';
-
 // Для удобного логирования в консоль
 export const logConfig = () => {
   console.log('=== Конфигурация приложения ===');
   console.log('API_URL:', API_URL);
-  console.log('WS_PATH:', WS_PATH);
+  console.log('WS_URL:', WS_URL);
   console.log('MAX_FILE_SIZE:', MAX_FILE_SIZE / (1024 * 1024) + ' МБ');
   console.log('APP_VERSION:', APP_VERSION);
   console.log('==============================');

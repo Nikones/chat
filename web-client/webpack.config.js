@@ -13,6 +13,8 @@ const envKeys = Object.keys(env).reduce((prev, next) => {
 }, {});
 
 module.exports = {
+  mode: 'development',
+  devtool: 'eval-source-map',
   entry: {
     main: ['./src/polyfills/process.js', './src/index.jsx']
   },
@@ -83,13 +85,13 @@ module.exports = {
     // Эксплицитно определяем process.env
     new webpack.DefinePlugin({
       'process.env': JSON.stringify({
-        NODE_ENV: process.env.NODE_ENV || 'production',
+        NODE_ENV: 'development',
         ...Object.keys(env).reduce((acc, key) => {
           acc[key] = env[key];
           return acc;
         }, {})
       }),
-      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production')
+      'process.env.NODE_ENV': JSON.stringify('development')
     }),
     // Обеспечиваем доступность нашего полифилла process
     new webpack.ProvidePlugin({

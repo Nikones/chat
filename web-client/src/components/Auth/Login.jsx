@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Form, Button, Card, Alert, Spinner } from 'react-bootstrap';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import axios from 'axios';
-import { checkSystemInitialization } from '../../api/apiInstance';
 
 // Базовый URL для API
 const API_URL = '/api';
@@ -13,40 +12,25 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [checkingStatus, setCheckingStatus] = useState(true);
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
   
-  // Проверка статуса инициализации при загрузке компонента
+  // Реф для отслеживания, смонтирован ли компонент
+  const mountedRef = useRef(true);
+  
+  // Устанавливаем флаг при размонтировании
   useEffect(() => {
-    const checkInitialization = async () => {
-      try {
-        // Если пользователь уже авторизован, переходим на главную
-        if (isAuthenticated) {
-          navigate('/');
-          return;
-        }
-        
-        // Используем новую функцию для проверки статуса системы
-        const { initialized, error } = await checkSystemInitialization();
-        
-        if (!initialized) {
-          // Система не инициализирована, перенаправляем на страницу настройки
-          console.log('Login: Система не инициализирована, перенаправляем на /setup');
-          navigate('/setup');
-        } else {
-          console.log('Login: Система инициализирована, остаемся на странице входа');
-        }
-      } catch (error) {
-        console.error('Login: Ошибка при проверке статуса инициализации:', error);
-        // При ошибке остаемся на странице входа
-      } finally {
-        setCheckingStatus(false);
-      }
+    return () => {
+      mountedRef.current = false;
     };
-    
-    checkInitialization();
-  }, [navigate, isAuthenticated]);
+  }, []);
+  
+  // Перенаправление на главную, если пользователь авторизован
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/');
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -68,18 +52,30 @@ const Login = () => {
         password
       });
       
+      // Проверяем, смонтирован ли еще компонент перед обновлением состояния
+      if (!mountedRef.current) return;
+      
       console.log('Login: Успешный ответ:', response.status, response.statusText);
       
       if (response.data && response.data.token) {
         // Успешный вход
         await login(response.data.token, response.data.user);
+        
+        // Проверяем, смонтирован ли еще компонент перед навигацией
+        if (!mountedRef.current) return;
+        
         navigate('/');
       } else {
         console.error('Login: Неверный формат ответа:', response.data);
-        setError('Неверный формат ответа от сервера');
+        if (mountedRef.current) {
+          setError('Неверный формат ответа от сервера');
+        }
       }
     } catch (err) {
       console.error('Login: Ошибка входа:', err);
+      
+      // Проверяем, смонтирован ли еще компонент перед обновлением состояния
+      if (!mountedRef.current) return;
       
       // Детальная информация об ошибке для отладки
       if (err.response) {
@@ -103,19 +99,11 @@ const Login = () => {
         setError(`Ошибка: ${err.message}`);
       }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
   };
-
-  // Показываем индикатор загрузки при проверке статуса
-  if (checkingStatus) {
-    return (
-      <Container className="py-5 text-center">
-        <Spinner animation="border" variant="primary" />
-        <p className="mt-3">Проверка статуса системы...</p>
-      </Container>
-    );
-  }
 
   return (
     <Container className="py-5">
@@ -161,11 +149,10 @@ const Login = () => {
                   />
                 </Form.Group>
                 
-                <div className="d-grid gap-2">
+                <div className="d-grid">
                   <Button
                     variant="primary"
                     type="submit"
-                    size="lg"
                     disabled={loading}
                   >
                     {loading ? (
@@ -176,8 +163,9 @@ const Login = () => {
                           size="sm"
                           role="status"
                           aria-hidden="true"
+                          className="me-2"
                         />
-                        <span className="ms-2">Вход...</span>
+                        Вход...
                       </>
                     ) : (
                       'Войти'

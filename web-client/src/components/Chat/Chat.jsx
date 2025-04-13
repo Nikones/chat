@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Container, Row, Col, Alert, Spinner } from 'react-bootstrap';
 import { useMessages } from '../../contexts/MessageContext';
-import { useWebSocket } from '../../WebSocketContext';
+import { useWebSocket } from '../../contexts/WebSocketContext';
 import ChatHeader from './ChatHeader';
 import MessagesList from './MessagesList';
 import MessageInput from './MessageInput';
