@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Тестирование</title>
+    <meta charset="utf-8">
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 800px; 
+            margin: 0 auto; 
+            padding: 20px; 
+        }
+        .row { 
+            margin-bottom: 10px; 
+        }
+        .box { 
+            border: 1px solid #ccc; 
+            padding: 10px; 
+            margin-bottom: 20px; 
+            border-radius: 4px; 
+        }
+        button {
+            padding: 8px 12px;
+            margin-right: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #3e8e41;
+        }
+        input[type="text"] {
+            padding: 8px;
+            width: 300px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow: auto;
+            height: 200px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Тестирование</h1>
+    
+    <div class="box">
+        <h2>1. Проверка системы</h2>
+        <div id="system-info"></div>
+    </div>
+    
+    <div class="box">
+        <h2>2. Проверка браузера и состояния</h2>
+        <pre id="browser-info"></pre>
+        <button onclick="checkCookies()">Проверить cookies</button>
+        <button onclick="checkLocalStorage()">Проверить localStorage</button>
+    </div>
+    
+    <div class="box">
+        <h2>3. Тестирование WebSocket</h2>
+        <div class="row">
+            <input type="text" id="token" placeholder="Введите JWT токен" value="">
+        </div>
+        <div class="row">
+            <button onclick="testWebSocketWithURLToken()">Тест с URL параметром</button>
+            <button onclick="testWebSocketWithProtocol()">Тест с протоколом</button>
+            <button onclick="testWebSocketWithCookie()">Тест с cookie</button>
+        </div>
+        <div class="row">
+            <button onclick="useMMAuthToken()">Использовать cookie MMAUTHTOKEN</button>
+            <button onclick="testWebSocketWithDefault()">Тест с настройками по умолчанию</button>
+            <button onclick="testWebSocketWithBoth()">Тест с URL и протоколом</button>
+        </div>
+        <div class="row">
+            <button onclick="testConnectionWithoutToken()">Тест соединения без токена</button>
+            <button onclick="inspectLoginResponse()">Проверить ответ /api/login</button>
+        </div>
+        <pre id="log"></pre>
+    </div>
+    
+    <script>
+        // Логирование в UI
+        function log(message) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+        
+        // Логирование в инфо
+        function logInfo(message) {
+            const infoElement = document.getElementById('browser-info');
+            const timestamp = new Date().toLocaleTimeString();
+            infoElement.innerHTML += `[${timestamp}] ${message}\n`;
+            infoElement.scrollTop = infoElement.scrollHeight;
+        }
+        
+        // Проверка системы
+        function checkSystem() {
+            const systemInfo = document.getElementById('system-info');
+            
+            const webSocketSupported = 'WebSocket' in window;
+            const protocol = window.location.protocol;
+            const host = window.location.host;
+            const localStorageSupported = 'localStorage' in window;
+            
+            systemInfo.innerHTML = `
+                <div>User Agent: <strong>${navigator.userAgent}</strong></div>
+                <div>WebSocket поддерживается: <strong>${webSocketSupported}</strong></div>
+                <div>localStorage поддерживается: <strong>${localStorageSupported}</strong></div>
+                <div>Текущий протокол: <strong>${protocol}</strong></div>
+                <div>Текущий хост: <strong>${host}</strong></div>
+                <div>WebSocket URL: <strong>${protocol === 'https:' ? 'wss:' : 'ws:'}//${host}/api/ws</strong></div>
+            `;
+            
+            // Проверка токенов
+            const authToken = localStorage.getItem('auth_token');
+            const token = localStorage.getItem('token');
+            logInfo(`localStorage содержит ключи: ${Object.keys(localStorage)}`);
+            logInfo(`auth_token присутствует: ${authToken !== null}`);
+            logInfo(`token присутствует: ${token !== null}`);
+        }
+        
+        // Проверка cookies
+        function checkCookies() {
+            logInfo("=== Cookies ===");
+            const cookies = document.cookie.split(';');
+            if (cookies.length <= 1 && cookies[0] === "") {
+                logInfo("Cookies не найдены");
+            } else {
+                cookies.forEach((cookie) => {
+                    const [name, value] = cookie.trim().split('=');
+                    logInfo(`${name}: ${value}`);
+                    if (name === "MMAUTHTOKEN") {
+                        document.getElementById('token').value = value;
+                        logInfo(`Найден MMAUTHTOKEN, установлен в поле ввода`);
+                    }
+                });
+            }
+        }
+        
+        // Проверка localStorage
+        function checkLocalStorage() {
+            logInfo("=== LocalStorage ===");
+            if (localStorage.length === 0) {
+                logInfo("LocalStorage пуст");
+            } else {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    logInfo(`${key}: ${localStorage.getItem(key)}`);
+                }
+            }
+        }
+        
+        // Использовать MMAUTHTOKEN из cookie
+        function useMMAuthToken() {
+            const cookies = document.cookie.split(';');
+            let mmAuthToken = null;
+            
+            cookies.forEach((cookie) => {
+                const [name, value] = cookie.trim().split('=');
+                if (name === "MMAUTHTOKEN") {
+                    mmAuthToken = value;
+                }
+            });
+            
+            if (mmAuthToken) {
+                document.getElementById('token').value = mmAuthToken;
+                log(`Найден и установлен MMAUTHTOKEN: ${mmAuthToken}`);
+            } else {
+                log('ОШИБКА: MMAUTHTOKEN не найден в cookies');
+            }
+        }
+        
+        // Тест WebSocket с токеном в URL
+        function testWebSocketWithURLToken() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                log('ОШИБКА: Введите токен');
+                return;
+            }
+            
+            log('Тест WebSocket с токеном в URL параметре');
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/ws?token=${token}`;
+            
+            log(`Подключение к ${wsUrl}`);
+            
+            try {
+                const ws = new WebSocket(wsUrl);
+                
+                ws.onopen = () => {
+                    log('УСПЕХ: WebSocket соединение установлено');
+                };
+                
+                ws.onclose = (event) => {
+                    log(`WebSocket соединение закрыто: код=${event.code}, причина=${event.reason || 'не указана'}`);
+                };
+                
+                ws.onerror = (error) => {
+                    log(`ОШИБКА: WebSocket соединение не удалось`);
+                    console.error('WebSocket error:', error);
+                };
+                
+                setTimeout(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        log('Закрытие соединения через 5 секунд');
+                        ws.close();
+                    }
+                }, 5000);
+            } catch (error) {
+                log(`ОШИБКА: ${error.message}`);
+            }
+        }
+        
+        // Тест WebSocket с протоколом
+        function testWebSocketWithProtocol() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                log('ОШИБКА: Введите токен');
+                return;
+            }
+            
+            log('Тест WebSocket с токеном в протоколе');
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/ws`;
+            
+            // Форматы протокола: "token.ТОКЕН" или "token:ТОКЕН"
+            const tokenProtocol = `token.${token}`;
+            log(`Подключение к ${wsUrl} с протоколом ${tokenProtocol}`);
+            
+            try {
+                const ws = new WebSocket(wsUrl, [tokenProtocol]);
+                
+                ws.onopen = () => {
+                    log('УСПЕХ: WebSocket соединение с протоколом установлено');
+                };
+                
+                ws.onclose = (event) => {
+                    log(`WebSocket соединение закрыто: код=${event.code}, причина=${event.reason || 'не указана'}`);
+                };
+                
+                ws.onerror = (error) => {
+                    log(`ОШИБКА: WebSocket соединение не удалось`);
+                    console.error('WebSocket error:', error);
+                };
+                
+                setTimeout(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        log('Закрытие соединения через 5 секунд');
+                        ws.close();
+                    }
+                }, 5000);
+            } catch (error) {
+                log(`ОШИБКА: ${error.message}`);
+            }
+        }
+        
+        // Тест WebSocket с текущими cookies (без ручной модификации)
+        function testWebSocketWithCookie() {
+            log('Тест WebSocket с текущими cookies (токен берется из cookies на сервере)');
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/ws`;
+            
+            log(`Подключение к ${wsUrl} без параметров (полагаясь на cookies)`);
+            
+            try {
+                const ws = new WebSocket(wsUrl);
+                
+                ws.onopen = () => {
+                    log('УСПЕХ: WebSocket соединение с cookies установлено');
+                };
+                
+                ws.onclose = (event) => {
+                    log(`WebSocket соединение закрыто: код=${event.code}, причина=${event.reason || 'не указана'}`);
+                };
+                
+                ws.onerror = (error) => {
+                    log(`ОШИБКА: WebSocket соединение не удалось`);
+                    console.error('WebSocket error:', error);
+                };
+                
+                setTimeout(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        log('Закрытие соединения через 5 секунд');
+                        ws.close();
+                    }
+                }, 5000);
+            } catch (error) {
+                log(`ОШИБКА: ${error.message}`);
+            }
+        }
+        
+        // Тест соединения без токена для диагностики ошибки 401
+        function testConnectionWithoutToken() {
+            log('Тест WebSocket соединения без токена (ожидаем 401)');
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/ws`;
+            
+            try {
+                const ws = new WebSocket(wsUrl);
+                
+                ws.onopen = () => {
+                    log('НЕОЖИДАННО: WebSocket соединение без токена установлено!');
+                };
+                
+                ws.onclose = (event) => {
+                    log(`WebSocket без токена закрыто: код=${event.code}, причина=${event.reason || 'не указана'}`);
+                };
+                
+                ws.onerror = (error) => {
+                    log(`Ожидаемая ошибка при соединении без токена`);
+                    console.error('WebSocket error (expected):', error);
+                };
+            } catch (error) {
+                log(`Ошибка при создании WebSocket без токена: ${error.message}`);
+            }
+        }
+        
+        // Анализ ответа /api/login для диагностики токена
+        function inspectLoginResponse() {
+            log('=== Проверка ответа /api/login ===');
+            
+            // Получаем сохраненный ответ аутентификации из localStorage, если есть
+            const savedLoginResponse = localStorage.getItem('lastLoginResponse');
+            if (savedLoginResponse) {
+                try {
+                    const parsedResponse = JSON.parse(savedLoginResponse);
+                    log(`Последний сохраненный ответ логина: ${JSON.stringify(parsedResponse, null, 2)}`);
+                    
+                    if (parsedResponse.token) {
+                        document.getElementById('token').value = parsedResponse.token;
+                        log(`Установлен токен из ответа: ${parsedResponse.token}`);
+                    }
+                } catch (e) {
+                    log(`Ошибка при парсинге сохраненного ответа: ${e.message}`);
+                }
+            } else {
+                log('Нет сохраненного ответа логина в localStorage');
+                
+                // Предлагаем пользователю выполнить вход и сохранить ответ
+                log('Выполните вход и добавьте в консоль браузера:');
+                log(`localStorage.setItem('lastLoginResponse', JSON.stringify(response.data))`);
+            }
+        }
+        
+        // Тест с настройками по умолчанию - тест для прямого тестирования
+        function testWebSocketWithDefault() {
+            // Тестовый токен - генерируем уникальный для отладки
+            const testToken = `test_token_${Date.now()}`;
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            const wsUrl = `${protocol}//${host}/api/ws?token=${testToken}`;
+            log(`Тестовый WebSocket URL: ${wsUrl}`);
+            
+            try {
+                // Создаем WebSocket с тестовым токеном
+                const wsTest = new WebSocket(wsUrl);
+                log('WebSocket объект успешно создан');
+                
+                wsTest.onopen = function() {
+                    log('Тестовое WebSocket соединение установлено');
+                    // Отправляем тестовое сообщение
+                    try {
+                        wsTest.send(JSON.stringify({
+                            type: 'ping',
+                            payload: { clientTime: new Date().toISOString() }
+                        }));
+                        log('Отправлено тестовое сообщение ping');
+                    } catch (e) {
+                        log(`Ошибка отправки тестового сообщения: ${e.message}`);
+                    }
+                };
+                
+                wsTest.onerror = function(event) {
+                    log('Ошибка тестового WebSocket соединения: ' + event);
+                    console.error('WebSocket connection error:', event);
+                };
+                
+                wsTest.onmessage = function(event) {
+                    log(`Получено сообщение: ${event.data}`);
+                    try {
+                        const parsed = JSON.parse(event.data);
+                        log(`Тип сообщения: ${parsed.type}, содержимое: ${JSON.stringify(parsed.payload)}`);
+                    } catch (e) {
+                        log(`Не удалось разобрать JSON: ${e.message}`);
+                    }
+                };
+                
+                wsTest.onclose = function(event) {
+                    log(`Тестовое WebSocket соединение закрыто ${event.code} ${event.reason || ''}`);
+                };
+            } catch (e) {
+                log(`Ошибка при создании WebSocket: ${e.message}`);
+            }
+        }
+        
+        // Тест с URL и протоколом
+        function testWebSocketWithBoth() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                log('ОШИБКА: Введите токен');
+                return;
+            }
+            
+            log('Тест WebSocket с токеном в URL и протоколе');
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/ws`;
+            
+            // Форматы протокола: "token.ТОКЕН" или "token:ТОКЕН"
+            const tokenProtocol = `token.${token}`;
+            log(`Подключение к ${wsUrl} с протоколом ${tokenProtocol}`);
+            
+            try {
+                const ws = new WebSocket(wsUrl, [tokenProtocol]);
+                
+                ws.onopen = () => {
+                    log('УСПЕХ: WebSocket соединение с URL и протоколом установлено');
+                };
+                
+                ws.onclose = (event) => {
+                    log(`WebSocket соединение закрыто: код=${event.code}, причина=${event.reason || 'не указана'}`);
+                };
+                
+                ws.onerror = (error) => {
+                    log(`ОШИБКА: WebSocket соединение не удалось`);
+                    console.error('WebSocket error:', error);
+                };
+                
+                setTimeout(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        log('Закрытие соединения через 5 секунд');
+                        ws.close();
+                    }
+                }, 5000);
+            } catch (error) {
+                log(`ОШИБКА: ${error.message}`);
+            }
+        }
+        
+        // Инициализация
+        window.onload = function() {
+            checkSystem();
+        };
+    </script>
+</body>
+</html> 

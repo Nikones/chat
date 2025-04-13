@@ -201,7 +201,7 @@ func (s *Server) handleFileUpload(c *gin.Context) {
 	} else {
 		wsMessage := WSMessage{
 			Type:    "file",
-			Content: json.RawMessage(messageJSON),
+			Payload: json.RawMessage(messageJSON),
 		}
 
 		// Отправляем сообщение через WebSocket

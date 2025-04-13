@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -109,6 +110,9 @@ func NewServer(cfg *config.Config, db *database.Database) *Server {
 	logger.Debug("Настройка маршрутов API")
 	server.setupRoutes()
 
+	// Проверка и автоматическая инициализация системы при запуске
+	server.initializeSystemIfNeeded()
+
 	// Если Redis включен, настраиваем подписку на сообщения
 	if redisClient != nil && redisClient.IsEnabled() {
 		logger.Info("Настройка подписок Redis")
@@ -161,7 +165,7 @@ func (s *Server) handleRedisMessage(msg redis.PubSubMessage) {
 		// Формируем WebSocket сообщение
 		wsMsg := WSMessage{
 			Type:    msg.Type,
-			Content: msg.Content,
+			Payload: msg.Content,
 		}
 
 		// Сериализуем сообщение
@@ -207,23 +211,13 @@ func (s *Server) setupRoutes() {
 		// Авторизация
 		public.POST("/login", s.handleLogin)
 
-		// Проверка инициализации и первоначальная настройка
-		public.GET("/system/initialized", s.handleCheckInitialized)
-		public.POST("/system/setup", s.handleInitialSetup)
-
-		// Добавляем альтернативный эндпоинт для совместимости
-		public.GET("/system/status", s.handleSystemStatus)
-
-		// Добавляем маршрут для сброса системы (для разработки)
-		public.GET("/system/reset", s.handleResetSystem)
-
-		// Скачивание файлов (публичный доступ по токену)
-		public.GET("/files/download/:token", s.handleFileDownload)
-
 		// Проверка работы сервера
 		public.GET("/health", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 		})
+
+		// Скачивание файлов (публичный доступ по токену)
+		public.GET("/files/download/:token", s.handleFileDownload)
 	}
 
 	// Защищенные маршруты
@@ -345,7 +339,7 @@ func (s *Server) unregisterClient(client *Client) {
 // Обработка входящего сообщения
 func (s *Server) processMessage(client *Client, message []byte) {
 	// Разбираем сообщение
-	var msg WSMessage
+	var msg wsMessage
 	if err := json.Unmarshal(message, &msg); err != nil {
 		logger.Errorf("Ошибка разбора сообщения: %v", err)
 		return
@@ -356,7 +350,7 @@ func (s *Server) processMessage(client *Client, message []byte) {
 	case "text":
 		// Обработка текстового сообщения
 		var textMsg map[string]interface{}
-		if err := json.Unmarshal(msg.Content, &textMsg); err != nil {
+		if err := json.Unmarshal([]byte(msg.Payload), &textMsg); err != nil {
 			logger.Errorf("Ошибка разбора текстового сообщения: %v", err)
 			return
 		}
@@ -418,7 +412,7 @@ func (s *Server) sendMessageHistory(client *Client) {
 		// Формируем сообщение WebSocket
 		wsMsg := WSMessage{
 			Type: "text",
-			Content: json.RawMessage(fmt.Sprintf(`{
+			Payload: json.RawMessage(fmt.Sprintf(`{
 				"id": %d,
 				"sender_id": %d,
 				"recipient_id": %d,
@@ -474,34 +468,138 @@ func (s *Server) handleSystemStatus(c *gin.Context) {
 
 // handleWebSocket обрабатывает WebSocket соединения
 func (s *Server) handleWebSocket(c *gin.Context) {
-	userID := c.GetUint("user_id")
-	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Требуется авторизация"})
+	// Записываем детальное логирование всех возможных мест, где может быть токен
+	logger.Debugf("WebSocket: Начало обработки соединения, адрес: %s", c.Request.RemoteAddr)
+	logger.Debugf("WebSocket: Все заголовки запроса: %v", c.Request.Header)
+
+	// Получаем токен из URL-параметра
+	tokenString := c.Query("token")
+
+	// Проверяем наличие токена в заголовке
+	authHeader := c.GetHeader("Authorization")
+	logger.Debugf("WebSocket: Заголовок Authorization: '%s'", authHeader)
+
+	// Проверяем наличие токена в куках
+	tokenCookie, err := c.Cookie("token")
+	if err != nil {
+		logger.Debugf("WebSocket: Токен в куках не найден: %v", err)
+	} else {
+		logger.Debugf("WebSocket: Токен из куки: '%s'", tokenCookie)
+		if tokenString == "" {
+			tokenString = tokenCookie
+			logger.Debugf("WebSocket: Используем токен из куки")
+		}
+	}
+
+	// Проверяем токен в заголовке
+	if tokenString == "" && strings.HasPrefix(authHeader, "Bearer ") {
+		tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+		logger.Debugf("WebSocket: Используем токен из заголовка Authorization")
+	}
+
+	if tokenString == "" {
+		logger.Warnf("WebSocket: Токен не найден ни в URL, ни в заголовке, ни в куках")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Требуется токен авторизации"})
 		return
 	}
+
+	// Устанавливаем заголовок Authorization для работы с JWTAuth middleware
+	c.Request.Header.Set("Authorization", "Bearer "+tokenString)
+	logger.Debugf("WebSocket: Установлен заголовок Authorization: 'Bearer %s'", maskToken(tokenString))
+
+	// Получаем userID после аутентификации JWT
+	userID, exists := c.Get("userID")
+	if !exists {
+		logger.Warnf("WebSocket: Не удалось получить userID после проверки токена")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Недействительный токен авторизации"})
+		return
+	}
+
+	logger.Debugf("WebSocket: Успешная аутентификация пользователя ID=%d", userID)
 
 	// Обновляем соединение до WebSocket
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		logger.Errorf("Ошибка обновления соединения до WebSocket: %v", err)
+		logger.Errorf("WebSocket: Ошибка обновления соединения до WebSocket: %v", err)
 		return
 	}
+	logger.Debugf("WebSocket: Соединение успешно обновлено до WebSocket для пользователя ID=%d", userID)
 
 	// Создаем клиента
 	client := &WSClient{
 		server:        s,
 		conn:          conn,
 		send:          make(chan []byte, 256),
-		userID:        userID,
+		userID:        userID.(uint),
 		authenticated: true,
+		clientInfo:    c.Request.UserAgent(),
 	}
 
 	// Сохраняем клиента в карте соединений
 	s.wsClients.Store(userID, client)
+	logger.Debugf("WebSocket: Клиент сохранен в карте соединений, UserAgent: %s", c.Request.UserAgent())
+
+	// Отправляем пользователю сообщение для подтверждения соединения
+	debugMsg := fmt.Sprintf("Соединение WebSocket установлено для пользователя ID=%d", userID)
+	debugData, _ := json.Marshal(map[string]interface{}{
+		"type": "debug",
+		"payload": map[string]string{
+			"message": debugMsg,
+		},
+	})
+	conn.WriteMessage(websocket.TextMessage, debugData)
+	logger.Debugf("WebSocket: Отправлено отладочное сообщение подтверждения")
 
 	// Запускаем горутины для чтения и записи
 	go client.writePump()
 	go client.readPump()
 
-	logger.Infof("Пользователь %d подключен по WebSocket", userID)
+	logger.Infof("WebSocket: Пользователь %d успешно подключен по WebSocket", userID)
+}
+
+// Инициализирует систему, если нет ни одного пользователя
+func (s *Server) initializeSystemIfNeeded() {
+	// Проверяем, инициализирована ли система
+	initialized, err := s.db.IsInitialized()
+	if err != nil {
+		logger.Errorf("Ошибка проверки инициализации: %v", err)
+		return
+	}
+
+	// Если система уже инициализирована, ничего не делаем
+	if initialized {
+		logger.Info("Система уже инициализирована")
+		return
+	}
+
+	// Получаем данные первого администратора из переменных окружения
+	adminUsername := os.Getenv("ADMIN_USERNAME")
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
+
+	if adminUsername == "" || adminPassword == "" {
+		logger.Warn("Переменные окружения ADMIN_USERNAME и/или ADMIN_PASSWORD не установлены")
+		return
+	}
+
+	// Создаем администратора
+	admin := models.User{
+		Username: adminUsername,
+		Password: adminPassword,
+		Role:     "admin",
+	}
+
+	// Хешируем пароль
+	if err := admin.HashPassword(); err != nil {
+		logger.Errorf("Ошибка хеширования пароля: %v", err)
+		return
+	}
+
+	// Сохраняем в базу данных
+	result := s.db.DB.Create(&admin)
+	if result.Error != nil {
+		logger.Errorf("Ошибка создания администратора: %v", result.Error)
+		return
+	}
+
+	logger.Infof("Система успешно инициализирована. Создан администратор: %s", admin.Username)
 }

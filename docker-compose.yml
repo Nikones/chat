@@ -1,7 +1,10 @@
 networks:
-  dmz_network:
+  opt_dmz_network:
     external: true
     name: opt_dmz_network
+  host_bridge:
+    driver: bridge
+    name: host_bridge
 
 services:
   # Сервер мессенджера
@@ -13,9 +16,12 @@ services:
     ports:
       - "${SERVER_PORT:-9095}:9095"
       - "9091:9091"  # WebSocket порт
+      - "55583:9091" # Экспозиция WebSocket порта на хосте для проброса
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
     environment:
       - DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASSWORD:-postgres12345!}@db:5432/${DB_NAME:-messenger}?sslmode=disable
       - JWT_SECRET=${JWT_SECRET:-gp2Ju8PPFTvLA4WRbDDNF5jUQ2sX7KcPBh67VwnM34LkR9ZsSxDqE5tU8X2aYcFG}
@@ -36,44 +42,68 @@ services:
       - SERVER_ENCRYPTION_KEY=bTEvUHlYQ0VlbWVaZUJENUh2aUpKWGQ2V2JTQzl5d20=
       - REDIS_ENABLED=true
       - LOG_LEVEL=${LOG_LEVEL:-debug}
-      - LOG_JSON=${LOG_JSON:-true}
-      - APP_ENV=${APP_ENV:-development}
+      - LOG_JSON=${LOG_JSON:-false}
+      - APP_ENV=development
       - SERVER_HOST=0.0.0.0
       - WEBSOCKET_PORT=9091
       - CONFIG_PATH=/app/config/config.json
-      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Adm1n$3cureP@ss}
+      - ADMIN_USERNAME=kikita
+      - ADMIN_PASSWORD=1q2w3e4R!
+      - CORS_ENABLED=true
     restart: unless-stopped
     volumes:
       - ./uploads:/app/uploads
       - ./logs/server:/app/logs
     networks:
-      dmz_network:
+      opt_dmz_network:
         ipv4_address: 10.16.52.15
+      host_bridge:
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9095/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   # Клиентское приложение
   client:
     build:
       context: .
       dockerfile: docker/client/Dockerfile
+    container_name: messenger-client
     ports:
       - "55581:80"  # Веб-клиент на порту 55581 для прокси
+      - "3000:80"   # Дополнительный локальный порт для разработки
     depends_on:
-      - server
+      server:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=development
+      - REACT_APP_API_URL=https://chat.kikita.ru/api
+      - REACT_APP_WS_URL=wss://chat.kikita.ru/api/ws
     restart: unless-stopped
+    volumes:
+      - ./websocket-test.html:/usr/share/nginx/html/websocket-test.html:ro
     networks:
-      dmz_network:
+      opt_dmz_network:
         ipv4_address: 10.16.52.16
+      host_bridge:
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/nginx-status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
 
   # База данных PostgreSQL
   db:
@@ -87,13 +117,20 @@ services:
       - pg_data:/var/lib/postgresql/data
     restart: unless-stopped
     networks:
-      dmz_network:
+      opt_dmz_network:
         ipv4_address: 10.16.52.17
+      host_bridge:
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-messenger}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # Redis для WebSocket масштабирования
   redis:
@@ -106,13 +143,20 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
     networks:
-      dmz_network:
+      opt_dmz_network:
         ipv4_address: 10.16.52.18
+      host_bridge:
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
 volumes:
   pg_data:

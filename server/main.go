@@ -1,12 +1,17 @@
 package main
 
 import (
+	"fmt"
+	"net/http"
 	"os"
+
+	"github.com/gin-gonic/gin"
 
 	"messenger/api"
 	"messenger/config"
 	"messenger/database"
 	"messenger/logger"
+	"messenger/middleware"
 )
 
 func main() {
@@ -43,6 +48,33 @@ func main() {
 	// Инициализация и запуск сервера
 	server := api.NewServer(cfg, db)
 	logger.Info("Сервер инициализирован, запуск...")
+
+	// Запуск WebSocket сервера на отдельном порту
+	wsPort := os.Getenv("WEBSOCKET_PORT")
+	if wsPort != "" {
+		wsAddr := fmt.Sprintf("%s:%s", cfg.Server.Host, wsPort)
+
+		// Создаем отдельный роутер для WebSocket сервера
+		wsRouter := gin.New()
+		wsRouter.Use(gin.Recovery())
+
+		// Применяем JWT аутентификацию
+		wsRouter.Use(middleware.JWTAuth(cfg.JWT.Secret))
+
+		// Регистрируем WebSocket обработчик через адаптер
+		wsRouter.GET("/api/ws", func(c *gin.Context) {
+			server.WebSocketHandler(c)
+		})
+
+		logger.Infof("Запуск WebSocket сервера на %s", wsAddr)
+		go func() {
+			if err := http.ListenAndServe(wsAddr, wsRouter); err != nil {
+				logger.Fatalf("Ошибка запуска WebSocket сервера: %v", err)
+			}
+		}()
+	} else {
+		logger.Warn("WEBSOCKET_PORT не задан, WebSocket сервер не будет запущен")
+	}
 
 	if err := server.Run(); err != nil {
 		logger.Fatalf("Ошибка запуска сервера: %v", err)

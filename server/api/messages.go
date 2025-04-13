@@ -242,11 +242,14 @@ func (s *Server) handleMarkMessagesAsRead(c *gin.Context) {
 
 	// Отправляем уведомление о прочтении через WebSocket
 	// Формируем WebSocket сообщение
+	chatID := uint(req.SenderID)
 	wsMessage := WSMessage{
-		Type: "read_receipt",
-		Content: json.RawMessage(fmt.Sprintf(`{
-			"reader_id": %d
-		}`, userID)),
+		Type: "read",
+		Payload: ReadReceiptPayload{
+			ChatID:    chatID,
+			UserID:    userID,
+			Timestamp: time.Now(),
+		},
 	}
 
 	// Если включен Redis, отправляем уведомление через него
