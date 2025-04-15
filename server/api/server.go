@@ -218,6 +218,9 @@ func (s *Server) setupRoutes() {
 
 		// Скачивание файлов (публичный доступ по токену)
 		public.GET("/files/download/:token", s.handleFileDownload)
+
+		// WebSocket для чата и звонков (перемещен из защищенной группы)
+		public.GET("/ws", s.handleWebSocket)
 	}
 
 	// Защищенные маршруты
@@ -234,18 +237,32 @@ func (s *Server) setupRoutes() {
 		// Список пользователей для чата (доступно всем авторизованным)
 		auth.GET("/chat/users", s.handleGetChatUsers)
 
-		// Сообщения
+		// API для работы с чатами
+		auth.GET("/chat", s.handleGetChats)
+		auth.POST("/chat", s.handleCreateChat)
+		auth.GET("/chat/:chatID", s.handleGetChat)
+		auth.PUT("/chat/:chatID", s.handleUpdateChat)
+		auth.POST("/chat/:chatID/leave", s.handleLeaveChat)
+		auth.POST("/chat/:chatID/users", s.handleAddUserToChat)
+		auth.DELETE("/chat/:chatID/users/:userID", s.handleRemoveUserFromChat)
+
+		// API для сообщений в чатах
+		auth.GET("/chat/:chatID/messages", s.handleGetMessages)
+		auth.POST("/chat/:chatID/messages", s.handleSendMessage)
+		auth.POST("/chat/:chatID/read", s.handleMarkMessagesAsRead)
+
+		// Сообщения (используются в старой версии API, будут удалены)
 		auth.GET("/messages/:user_id", s.handleGetMessages)
 		auth.POST("/messages", s.handleSendMessage)
 
-		// Отметить сообщения как прочитанные
+		// Отметить сообщения как прочитанные (используется в старой версии API, будет удалено)
 		auth.POST("/messages/read", s.handleMarkMessagesAsRead)
 
 		// Файлы
 		auth.POST("/files/upload", s.handleFileUpload)
 
 		// WebSocket для чата и звонков
-		auth.GET("/ws", s.handleWebSocket)
+		// auth.GET("/ws", s.handleWebSocket) - перемещено в публичную группу
 
 		// Администраторские маршруты
 		auth.GET("/admin/users", s.handleAdminGetUsers)
@@ -503,18 +520,16 @@ func (s *Server) handleWebSocket(c *gin.Context) {
 		return
 	}
 
-	// Устанавливаем заголовок Authorization для работы с JWTAuth middleware
-	c.Request.Header.Set("Authorization", "Bearer "+tokenString)
-	logger.Debugf("WebSocket: Установлен заголовок Authorization: 'Bearer %s'", maskToken(tokenString))
-
-	// Получаем userID после аутентификации JWT
-	userID, exists := c.Get("userID")
-	if !exists {
-		logger.Warnf("WebSocket: Не удалось получить userID после проверки токена")
+	// Вместо полагания на JWTAuth middleware, напрямую проверяем токен
+	claims, err := middleware.ValidateToken(tokenString, s.config.JWT.Secret)
+	if err != nil {
+		logger.Warnf("WebSocket: Недействительный токен: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Недействительный токен авторизации"})
 		return
 	}
 
+	// Получаем userID из проверенных JWT claims
+	userID := claims.UserID
 	logger.Debugf("WebSocket: Успешная аутентификация пользователя ID=%d", userID)
 
 	// Обновляем соединение до WebSocket
@@ -530,7 +545,7 @@ func (s *Server) handleWebSocket(c *gin.Context) {
 		server:        s,
 		conn:          conn,
 		send:          make(chan []byte, 256),
-		userID:        userID.(uint),
+		userID:        userID,
 		authenticated: true,
 		clientInfo:    c.Request.UserAgent(),
 	}

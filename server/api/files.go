@@ -192,7 +192,7 @@ func (s *Server) handleFileUpload(c *gin.Context) {
 	}
 
 	// Отправляем уведомление через WebSocket
-	message.Files = []models.File{fileRecord}
+	message.File = &fileRecord
 
 	// Сериализуем данные в JSON
 	messageJSON, err := json.Marshal(message)

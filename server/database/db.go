@@ -111,7 +111,14 @@ func NewDatabase(cfg *config.Config) (*Database, error) {
 
 	// Автомиграция моделей
 	logger.Info("Запуск миграции моделей")
-	err = db.AutoMigrate(&models.User{}, &models.Message{}, &models.File{})
+	err = db.AutoMigrate(
+		&models.User{},
+		&models.Chat{},
+		&models.ChatUser{},
+		&models.Message{},
+		&models.File{},
+		&models.DirectMessage{},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка миграции: %w", err)
 	}
@@ -131,7 +138,7 @@ func NewDatabase(cfg *config.Config) (*Database, error) {
 // Проверка, инициализирована ли система
 func (db *Database) IsInitialized() (bool, error) {
 	var count int64
-	err := db.Model(&models.User{}).Count(&count).Error
+	err := db.DB.Model(&models.User{}).Count(&count).Error
 	if err != nil {
 		return false, err
 	}
@@ -145,15 +152,15 @@ func (db *Database) Reset() error {
 	logger.Warn("Сброс всех данных в БД!")
 
 	// Удаляем все записи из таблиц
-	if err := db.Exec("DELETE FROM files").Error; err != nil {
+	if err := db.DB.Exec("DELETE FROM files").Error; err != nil {
 		return err
 	}
 
-	if err := db.Exec("DELETE FROM messages").Error; err != nil {
+	if err := db.DB.Exec("DELETE FROM messages").Error; err != nil {
 		return err
 	}
 
-	if err := db.Exec("DELETE FROM users").Error; err != nil {
+	if err := db.DB.Exec("DELETE FROM users").Error; err != nil {
 		return err
 	}
 

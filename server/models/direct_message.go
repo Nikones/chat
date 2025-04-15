@@ -20,7 +20,6 @@ type DirectMessage struct {
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
 	FileID      *uint          `json:"file_id,omitempty"`
 	File        *File          `gorm:"foreignKey:FileID" json:"file,omitempty"`
-	Files       []File         `gorm:"foreignKey:MessageID" json:"files,omitempty"`
 
 	Sender    User `gorm:"foreignKey:SenderID" json:"sender"`
 	Recipient User `gorm:"foreignKey:RecipientID" json:"recipient"`

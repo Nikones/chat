@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"messenger/logger"
+	"messenger/middleware"
 	"messenger/models"
 	"messenger/utils/crypto"
 )
@@ -162,20 +163,17 @@ func (s *Server) WebSocketHandler(c *gin.Context) {
 		return
 	}
 
-	// Устанавливаем заголовок Authorization для работы с JWTAuth middleware
-	c.Request.Header.Set("Authorization", "Bearer "+tokenString)
-	logger.Debugf("WebSocketHandler: Установлен заголовок Authorization: Bearer %s...", tokenString[:10])
-
-	// Получаем userID после аутентификации JWT
-	userIDValue, exists := c.Get("userID")
-	if !exists {
-		logger.Warn("WebSocketHandler: Недействительный токен")
+	// Вместо установки заголовка Authorization для JWTAuth middleware,
+	// напрямую проверяем токен здесь, так как маршрут теперь публичный
+	claims, err := middleware.ValidateToken(tokenString, s.config.JWT.Secret)
+	if err != nil {
+		logger.Warnf("WebSocketHandler: Недействительный токен: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Недействительный токен авторизации"})
 		return
 	}
-	userID := userIDValue.(uint)
 
-	// Логируем успешную аутентификацию
+	// Получаем userID из проверенных claims
+	userID := claims.UserID
 	logger.Infof("WebSocketHandler: Успешная аутентификация пользователя %d", userID)
 
 	// Настраиваем upgrader для текущего запроса
