@@ -13,10 +13,37 @@ Docker-сеть: opt_dmz_network (10.16.52.x/24) - обязательно исп
 Клиент → Reverse-proxy (82.202.136.185) → MikroTik (95.30.251.97) → Docker контейнеры (10.16.52.x/24)
 2.3. Проброс портов на MikroTik (примеры правил)
 
-Порт 55580: API сервера (10.16.52.15:9095)
-Порт 55583: WebSocket (10.16.52.15:9091)
-Порт 55581: Web-клиент (10.16.52.16:80)
-Порт 7880/7881: LiveKit SFU для звонков (10.16.52.15:7880/7881)
+Flags: X - disabled, I - invalid; D - dynamic 
+ 0    chain=srcnat action=src-nat to-addresses=10.15.81.6 out-interface=LV_GRE log=no log-prefix="" 
+
+ 1    ;;; Traffic to WAN 
+      chain=srcnat action=src-nat to-addresses=95.30.251.97 out-interface=ether1 log=no log-prefix="" 
+
+ 2    ;;; DNS Redirect
+      chain=dstnat action=redirect protocol=udp in-interface-list=!WAN dst-port=53 log=no log-prefix="" 
+
+ 3    chain=dstnat action=dst-nat to-addresses=10.16.52.1 to-ports=80 protocol=tcp src-address=82.202.136.185 dst-port=55080 log=no log-prefix="" 
+
+ 4    chain=dstnat action=dst-nat to-addresses=10.16.52.1 to-ports=180 protocol=tcp src-address=82.202.136.185 dst-port=55180 log=no log-prefix="" 
+
+ 5    chain=dstnat action=dst-nat to-addresses=10.16.52.11 to-ports=8065 protocol=tcp src-address=82.202.136.185 dst-port=55280 log=no log-prefix="" 
+
+ 6    chain=dstnat action=dst-nat to-addresses=10.16.52.15 to-ports=9095 protocol=tcp src-address=82.202.136.185 dst-port=55580 log=no log-prefix="" 
+
+ 7    chain=dstnat action=dst-nat to-addresses=10.16.52.15 to-ports=9091 protocol=tcp src-address=82.202.136.185 dst-port=55583 log=no log-prefix="" 
+
+ 8    chain=dstnat action=dst-nat to-addresses=10.16.52.16 to-ports=8081 protocol=tcp src-address=82.202.136.185 dst-port=55581 log=no log-prefix="" 
+
+ 9    chain=dstnat action=dst-nat to-addresses=10.16.52.15 to-ports=7880 protocol=tcp src-address=82.202.136.185 dst-port=7880 log=no log-prefix="" 
+
+10    chain=dstnat action=dst-nat to-addresses=10.16.52.15 to-ports=7881 protocol=tcp src-address=82.202.136.185 dst-port=7881 log=no log-prefix="" 
+
+11    chain=dstnat action=dst-nat to-addresses=10.16.52.15 to-ports=7881 protocol=udp src-address=82.202.136.185 dst-port=7881 log=no log-prefix="" 
+
+12    chain=dstnat action=dst-nat to-addresses=10.16.52.15 to-ports=50000-60000 protocol=udp src-address=82.202.136.185 dst-port=50000-60000 log=no 
+      log-prefix="" 
+
+13    chain=dstnat action=dst-nat to-addresses=10.16.52.1 protocol=tcp in-interface=ether1 dst-port=443,80 log=no log-prefix=""
 
 3. Компоненты системы
 3.1. Серверная часть (Go)

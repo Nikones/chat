@@ -25,79 +25,70 @@ export const AuthProvider = ({ children }) => {
   
   // Получение токена из localStorage
   const getToken = useCallback(() => {
-    const authToken = localStorage.getItem('auth_token');
-    const simpleToken = localStorage.getItem('token');
-    
     console.log('AuthContext: Попытка получения токена из localStorage');
+    
+    // Пробуем разные ключи для совместимости с разными версиями
+    const authToken = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('token');
+    
     console.log('AuthContext: auth_token в localStorage:', authToken ? 'присутствует' : 'отсутствует');
-    console.log('AuthContext: token в localStorage:', simpleToken ? 'присутствует' : 'отсутствует');
+    console.log('AuthContext: token в localStorage:', token ? 'присутствует' : 'отсутствует');
     
-    // Если есть authToken, используем его, иначе проверяем simpleToken
-    if (authToken) {
-      return authToken;
-    } else if (simpleToken) {
-      // Для совместимости - если токен был сохранен под ключом 'token', копируем его в 'auth_token'
-      console.log('AuthContext: Найден токен под ключом "token", копируем в "auth_token"');
-      localStorage.setItem('auth_token', simpleToken);
-      return simpleToken;
-    }
-    
-    return null;
+    // Возвращаем токен, если он есть
+    return authToken || token || null;
   }, []);
   
-  // Сохранение токена и данных пользователя
+  // Сохранение данных аутентификации
   const saveAuthData = useCallback((token, userData) => {
-    if (token) {
-      console.log('AuthContext: Сохранение токена и данных пользователя');
-      console.log('AuthContext: Длина токена:', token.length);
-      console.log('AuthContext: Начало токена:', token.substring(0, 10) + '...');
-      
-      // Сохраняем токен под стандартным ключом
+    try {
+      console.log('AuthContext: Сохранение токена непосредственно в localStorage');
       localStorage.setItem('auth_token', token);
-      
-      // Для обеспечения совместимости также сохраняем под ключом 'token'
       localStorage.setItem('token', token);
       
-      if (userData) {
-        localStorage.setItem('user_data', JSON.stringify(userData));
-      }
+      // Сохраняем данные пользователя
+      localStorage.setItem('user_data', JSON.stringify(userData));
       
       // Устанавливаем заголовок Authorization для всех последующих запросов axios
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      console.log('AuthContext: Установлен заголовок авторизации для Axios');
       
-      // Инициализируем WebSocket соединение с новым токеном
-      console.log('AuthContext: Инициализация WebSocket с токеном');
-      wsService.init(token);
+      // Проверяем, что токен сохранен
+      const savedToken = localStorage.getItem('auth_token');
+      console.log('AuthContext: Проверка сохраненного токена:', 
+                  savedToken ? (savedToken.substring(0, 10) + '...') : 'не сохранен');
       
-      // Проверяем, что токен доступен после сохранения
-      setTimeout(() => {
-        const savedToken = localStorage.getItem('auth_token');
-        console.log('AuthContext: Проверка сохраненного токена через 500мс:', 
-                    savedToken ? 'токен сохранен' : 'токен не сохранен');
-      }, 500);
-      
-      return true;
+      return !!savedToken;
+    } catch (e) {
+      console.error('AuthContext: Ошибка при сохранении данных аутентификации:', e);
+      return false;
     }
-    return false;
   }, []);
   
   // Очистка данных аутентификации
   const clearAuthData = useCallback(() => {
     console.log('AuthContext: Очистка данных аутентификации');
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('token');
-    localStorage.removeItem('user_data');
-    delete axios.defaults.headers.common['Authorization'];
     
-    // Отключаем WebSocket соединение
-    wsService.disconnect();
+    try {
+      // Удаляем все связанные с аутентификацией данные
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user_data');
+      
+      // Удаляем заголовок авторизации
+      delete axios.defaults.headers.common['Authorization'];
+      
+      return true;
+    } catch (e) {
+      console.error('AuthContext: Ошибка при очистке данных аутентификации:', e);
+      return false;
+    }
   }, []);
   
-  // Проверка валидности текущей сессии
+  // Проверка актуальности сессии
   const checkSession = useCallback(async () => {
     console.log('AuthContext: Проверка текущей сессии');
-    setLoading(true);
     
+    // Получаем токен
     const token = getToken();
     
     if (!token) {
@@ -108,16 +99,17 @@ export const AuthProvider = ({ children }) => {
       return false;
     }
     
+    // Устанавливаем заголовок авторизации
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    console.log('AuthContext: Установлен заголовок Authorization для запросов');
+    
     try {
-      // Устанавливаем токен для запроса
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      // Проверяем токен на сервере
-      console.log('AuthContext: Запрос на проверку токена');
+      // Отправляем запрос на проверку сессии
+      console.log('AuthContext: Отправка запроса на проверку сессии');
       const response = await axios.get(`${API_URL}/auth/check`);
       
-      if (response.data && response.data.user) {
-        console.log('AuthContext: Сессия активна, пользователь:', response.data.user);
+      if (response.status === 200 && response.data && response.data.user) {
+        console.log('AuthContext: Сессия активна, пользователь:', response.data.user.username);
         setUser(response.data.user);
         setIsAuthenticated(true);
         setAdmin(response.data.user.role === 'admin');
@@ -125,16 +117,13 @@ export const AuthProvider = ({ children }) => {
         // Обновляем данные пользователя в localStorage
         localStorage.setItem('user_data', JSON.stringify(response.data.user));
         
-        // Убедимся, что заголовок точно установлен
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        
-        // Инициализируем WebSocket соединение
+        // Инициализация WebSocket, если токен актуален
         wsService.init(token);
         
         setLoading(false);
         return true;
       } else {
-        console.log('AuthContext: Ответ сервера не содержит данных пользователя');
+        console.log('AuthContext: Ответ сервера некорректен, выход из системы');
         clearAuthData();
         setIsAuthenticated(false);
         setUser(null);
@@ -143,45 +132,49 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('AuthContext: Ошибка при проверке сессии:', error);
+      
+      // При ошибке очищаем данные и выходим из системы
       clearAuthData();
       setIsAuthenticated(false);
       setUser(null);
-      setError('Ошибка проверки сессии');
       setLoading(false);
       return false;
     }
   }, [getToken, clearAuthData]);
   
-  // Функция для входа пользователя
+  // Вход в систему
   const login = async (token, userData) => {
+    console.log('AuthContext: Вход в систему');
+    setLoading(true);
+    setError(null);
+    
     try {
-      setLoading(true);
-      setError(null);
-      
-      console.log('AuthContext: Обработка входа пользователя');
-      
-      if (token && userData) {
-        console.log('AuthContext: Токен и данные пользователя получены напрямую');
-        
-        // Сохраняем токен и данные
-        saveAuthData(token, userData);
-        
-        // Устанавливаем аутентификацию
-        setIsAuthenticated(true);
-        setUser(userData);
-        setAdmin(userData.role === 'admin');
-        
-        console.log('AuthContext: Пользователь успешно аутентифицирован');
-        
-        // Инициализируем WebSocket соединение с токеном
-        wsService.init(token);
-        
-        return true;
-      } else {
-        console.error('AuthContext: Отсутствуют необходимые данные для входа');
-        setError('Отсутствуют необходимые данные для входа');
-        return false;
+      // Токен и данные пользователя уже должны быть в localStorage (сохранены в компоненте Login)
+      // Проверим это и установим заголовок авторизации
+      const savedToken = getToken();
+      if (!savedToken) {
+        console.log('AuthContext: Токен не найден в localStorage, пробуем сохранить снова');
+        if (!saveAuthData(token, userData)) {
+          console.error('AuthContext: Не удалось сохранить токен');
+          setError('Ошибка сохранения токена');
+          return false;
+        }
       }
+      
+      // Устанавливаем состояние аутентификации
+      setIsAuthenticated(true);
+      setUser(userData);
+      setAdmin(userData.role === 'admin');
+      
+      console.log('AuthContext: Пользователь успешно аутентифицирован');
+      console.log('AuthContext: isAuthenticated установлен в:', true);
+      console.log('AuthContext: user установлен в:', userData);
+      
+      // Инициализируем WebSocket соединение с токеном
+      console.log('AuthContext: Инициализация WebSocket');
+      wsService.init(token);
+      
+      return true;
     } catch (err) {
       console.error('AuthContext: Ошибка входа:', err);
       setError(err.message || 'Произошла ошибка при входе');

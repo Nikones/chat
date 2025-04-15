@@ -18,25 +18,32 @@ export const getChats = async () => {
 };
 
 // Создание нового чата
-export const createChat = async (userId) => {
+export const createChat = async (chatData) => {
   try {
-    const response = await axios.post(`${API_URL}/chats`, { userId });
+    const response = await axios.post(`${API_URL}/chats`, chatData, {
+      headers: {
+        Authorization: `Bearer ${getToken()}`
+      }
+    });
     return response.data;
   } catch (error) {
-    console.error('Ошибка при создании чата:', error);
+    console.error('Error creating chat:', error);
     throw error;
   }
 };
 
 // Получение сообщений чата
-export const getMessages = async (chatId, limit = 50, offset = 0) => {
+export const getMessages = async (chatId, page = 1, limit = 50) => {
   try {
     const response = await axios.get(`${API_URL}/chats/${chatId}/messages`, {
-      params: { limit, offset }
+      params: { page, limit },
+      headers: {
+        Authorization: `Bearer ${getToken()}`
+      }
     });
     return response.data;
   } catch (error) {
-    console.error('Ошибка при получении сообщений:', error);
+    console.error('Error getting messages:', error);
     throw error;
   }
 };
@@ -44,21 +51,29 @@ export const getMessages = async (chatId, limit = 50, offset = 0) => {
 // Отправка сообщения
 export const sendMessageApi = async (messageData) => {
   try {
-    const response = await axios.post(`${API_URL}/chats/${messageData.chatId}/messages`, messageData);
+    const response = await axios.post(`${API_URL}/chats/${messageData.chatId}/messages`, messageData, {
+      headers: {
+        Authorization: `Bearer ${getToken()}`
+      }
+    });
     return response.data;
   } catch (error) {
-    console.error('Ошибка при отправке сообщения:', error);
+    console.error('Error sending message:', error);
     throw error;
   }
 };
 
 // Отметка сообщений как прочитанных
-export const markMessagesAsRead = async (chatId, messageIds) => {
+export const markMessagesAsRead = async (chatId) => {
   try {
-    const response = await axios.post(`${API_URL}/chats/${chatId}/read`, { messageIds });
+    const response = await axios.post(`${API_URL}/chats/${chatId}/read`, {}, {
+      headers: {
+        Authorization: `Bearer ${getToken()}`
+      }
+    });
     return response.data;
   } catch (error) {
-    console.error('Ошибка при отметке сообщений как прочитанных:', error);
+    console.error('Error marking messages as read:', error);
     throw error;
   }
 };
@@ -66,10 +81,14 @@ export const markMessagesAsRead = async (chatId, messageIds) => {
 // Получение участников чата
 export const getChatParticipants = async (chatId) => {
   try {
-    const response = await axios.get(`${API_URL}/chats/${chatId}/participants`);
+    const response = await axios.get(`${API_URL}/chats/${chatId}/participants`, {
+      headers: {
+        Authorization: `Bearer ${getToken()}`
+      }
+    });
     return response.data;
   } catch (error) {
-    console.error('Ошибка при получении участников чата:', error);
+    console.error('Error getting chat participants:', error);
     throw error;
   }
 };
@@ -77,10 +96,14 @@ export const getChatParticipants = async (chatId) => {
 // Добавление участника в чат
 export const addChatParticipant = async (chatId, userId) => {
   try {
-    const response = await axios.post(`${API_URL}/chats/${chatId}/participants`, { userId });
+    const response = await axios.post(`${API_URL}/chats/${chatId}/participants`, { userId }, {
+      headers: {
+        Authorization: `Bearer ${getToken()}`
+      }
+    });
     return response.data;
   } catch (error) {
-    console.error('Ошибка при добавлении участника в чат:', error);
+    console.error('Error adding chat participant:', error);
     throw error;
   }
 };
@@ -88,10 +111,14 @@ export const addChatParticipant = async (chatId, userId) => {
 // Удаление участника из чата
 export const removeChatParticipant = async (chatId, userId) => {
   try {
-    const response = await axios.delete(`${API_URL}/chats/${chatId}/participants/${userId}`);
+    const response = await axios.delete(`${API_URL}/chats/${chatId}/participants/${userId}`, {
+      headers: {
+        Authorization: `Bearer ${getToken()}`
+      }
+    });
     return response.data;
   } catch (error) {
-    console.error('Ошибка при удалении участника из чата:', error);
+    console.error('Error removing chat participant:', error);
     throw error;
   }
 }; 

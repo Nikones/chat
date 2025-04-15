@@ -53,20 +53,25 @@ class WebSocketService {
     }
 
     try {
-      // Используем базовый URL без токена
-      console.log('WebSocketService: Подключение к', this.url, 'с использованием токена в заголовке');
+      // Добавляем токен как параметр запроса вместо подпротокола
+      const wsUrlWithToken = `${this.url}?token=${encodeURIComponent(this.token)}`;
+      console.log('WebSocketService: Подключение к WebSocket с токеном в URL');
+      console.log('WebSocketService: URL для подключения (без токена для безопасности):', this.url);
       
-      // Создаем объект WebSocket с поддержкой заголовка авторизации
-      this.socket = new WebSocket(this.url, [`token:${this.token}`]);
+      // Создаем объект WebSocket без подпротокола
+      this.socket = new WebSocket(wsUrlWithToken);
       
-      // Для отладки
+      // Расширенное логирование для отладки
       console.log('WebSocketService: WebSocket объект создан. Текущее состояние:', 
         this.getReadyStateText(this.socket.readyState));
+      console.log('WebSocketService: Протокол:', this.socket.protocol || 'не указан');
+      console.log('WebSocketService: Поддерживаемые расширения:', this.socket.extensions || 'не указаны');
       
       this.setupEventListeners();
     } catch (error) {
       console.error('WebSocketService: Ошибка при создании соединения', error);
       console.error('WebSocketService: Тип ошибки:', error.name, 'Сообщение:', error.message);
+      console.error('WebSocketService: Стек вызовов:', error.stack);
       this.notifyHandlers('onError', error);
       this.scheduleReconnect();
     }
@@ -96,6 +101,17 @@ class WebSocketService {
 
     this.socket.onopen = (event) => {
       console.log('WebSocketService: Соединение установлено успешно. Детали события:', event);
+      console.log('WebSocketService: Текущее состояние после open:', 
+        this.getReadyStateText(this.socket.readyState));
+      console.log('WebSocketService: Отправляем отладочное сообщение для проверки соединения');
+      
+      // Отправим тестовое сообщение для проверки соединения
+      try {
+        this.sendMessage({type: "PING", data: {timestamp: Date.now()}});
+      } catch (error) {
+        console.error('WebSocketService: Ошибка при отправке тестового сообщения:', error);
+      }
+      
       this.isConnected = true;
       this.reconnectAttempts = 0;
       this.notifyHandlers('onOpen', event);
@@ -107,6 +123,7 @@ class WebSocketService {
         reason: event.reason,
         wasClean: event.wasClean
       });
+      console.log('WebSocketService: Описание кода закрытия:', this.getCloseEventDescription(event.code));
       this.isConnected = false;
       this.notifyHandlers('onClose', event);
 
@@ -122,6 +139,8 @@ class WebSocketService {
       // Дополнительная информация для отладки
       console.error('WebSocketService: Текущее состояние сокета:', 
         this.getReadyStateText(this.socket.readyState));
+      console.error('WebSocketService: Детали ошибки (если доступны):', 
+        error.message, error.type, error.code);
       
       this.notifyHandlers('onError', error);
     };
@@ -235,6 +254,30 @@ class WebSocketService {
     
     this.isConnected = false;
     console.log('WebSocketService: Соединение отключено');
+  }
+
+  // Добавляем функцию для получения описания кода закрытия
+  getCloseEventDescription(code) {
+    const descriptions = {
+      1000: 'Нормальное закрытие - соединение успешно выполнило свою задачу',
+      1001: 'Уход - серверное приложение завершается или клиент закрывает страницу',
+      1002: 'Ошибка протокола - получено сообщение с ошибкой, которую невозможно обработать',
+      1003: 'Неприемлемый тип данных - получен тип данных, который невозможно обработать',
+      1004: 'Зарезервировано',
+      1005: 'Нет статуса - соединение закрылось без отправки кода закрытия',
+      1006: 'Соединение аномально закрылось - без получения фрейма закрытия',
+      1007: 'Некорректные данные - сообщение содержит несоответствующие типу данные',
+      1008: 'Нарушение правил - сообщение нарушает правила, определенные сервером',
+      1009: 'Сообщение слишком большое - размер сообщения превышает ожидаемый',
+      1010: 'Требуемое расширение - клиент завершает соединение из-за отсутствия расширений',
+      1011: 'Внутренняя ошибка - сервер столкнулся с непредвиденной ошибкой',
+      1012: 'Перезагрузка службы - сервер перезагружается',
+      1013: 'Попробуйте позже - сервер временно недоступен',
+      1014: 'Плохой шлюз - сервер-шлюз получил неверный ответ',
+      1015: 'TLS отказ - соединение закрылось из-за ошибки TLS'
+    };
+    
+    return descriptions[code] || `Неизвестный код (${code})`;
   }
 }
 

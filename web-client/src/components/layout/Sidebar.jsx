@@ -23,19 +23,19 @@ const Sidebar = () => {
   
   // Загрузка списка чатов
   useEffect(() => {
-    if (!chats || chats.length === 0) {
+    if (!Array.isArray(chats) || chats.length === 0) {
       loadChats();
     }
   }, [chats, loadChats]);
   
   // Фильтрация чатов при изменении поискового запроса или типа чата
   useEffect(() => {
-    if (!chats || chats.length === 0) {
+    if (!Array.isArray(chats) || chats.length === 0) {
       setFilteredChats([]);
       return;
     }
     
-    let filtered = [...chats];
+    let filtered = Array.isArray(chats) ? [...chats] : [];
     
     // Фильтрация по типу чата
     if (chatType !== 'all') {

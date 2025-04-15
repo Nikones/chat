@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Button } from 'react-bootstrap';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBars, faTimes } from '@fortawesome/free-solid-svg-icons';
@@ -13,10 +13,15 @@ import { useAuth } from '../../contexts/AuthContext';
 import './Layout.css';
 
 const Layout = () => {
-  const { activeCall } = useCall();
-  const { isConnected } = useWebSocket();
-  const { user } = useAuth();
+  // Получаем контекст вызовов с безопасной проверкой
+  const callContext = useCall();
+  // Безопасно извлекаем activeCall, предотвращая ошибку если контекст null
+  const activeCall = callContext?.currentCall;
+  
+  const { isConnected } = useWebSocket() || { isConnected: false };
+  const { user, isAuthenticated, loading, token } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [showSidebar, setShowSidebar] = useState(window.innerWidth >= 768);
   
   // Определяем, находимся ли мы на странице админ-панели
@@ -26,6 +31,30 @@ const Layout = () => {
   const toggleSidebar = () => {
     setShowSidebar(!showSidebar);
   };
+  
+  // Проверка аутентификации при монтировании
+  useEffect(() => {
+    console.log('Layout: Проверка аутентификации');
+    
+    // Проверяем аутентификацию по наличию пользователя и флага isAuthenticated
+    if (!isAuthenticated) {
+      console.log('Layout: Пользователь не аутентифицирован, перенаправление на /login');
+      navigate('/login');
+    } else {
+      console.log('Layout: Пользователь аутентифицирован:', user?.username);
+    }
+  }, [navigate, isAuthenticated, user, token]);
+  
+  // Если все еще идет загрузка, показываем индикатор
+  if (loading) {
+    return (
+      <div className="loading-container">
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Загрузка...</span>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className={`app-layout ${isAdminPanel ? 'admin-layout' : ''}`}>

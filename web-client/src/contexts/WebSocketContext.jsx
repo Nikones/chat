@@ -119,8 +119,8 @@ export const WebSocketProvider = ({ children }) => {
         ws.current.close();
       }
 
-      const baseUrl = window.location.origin.replace('http', 'ws');
-      const wsUrl = `${baseUrl}/api/ws?token=${encodeURIComponent(token)}`;
+      // Формируем URL WebSocket с добавлением токена как параметра запроса
+      const wsUrl = `${WS_URL}?token=${encodeURIComponent(token)}`;
       
       // Логируем токен для отладки (только часть токена для безопасности)
       logDebug('Инициализация WebSocket соединения', { 

@@ -63,12 +63,12 @@ module.exports = {
     host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: process.env.REACT_APP_API_URL || 'http://localhost:9090',
+        target: 'http://server:9095',
         secure: false,
         changeOrigin: true
       },
-      '/ws': {
-        target: process.env.REACT_APP_WS_URL || 'ws://localhost:9091',
+      '/api/ws': {
+        target: 'ws://server:9091',
         secure: false,
         ws: true
       }

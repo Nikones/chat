@@ -1,7 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Form, Button, Card, Alert, Spinner } from 'react-bootstrap';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
 import axios from 'axios';
 
 // Базовый URL для API
@@ -12,26 +10,7 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-  const { login, isAuthenticated } = useAuth();
   
-  // Реф для отслеживания, смонтирован ли компонент
-  const mountedRef = useRef(true);
-  
-  // Устанавливаем флаг при размонтировании
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-  
-  // Перенаправление на главную, если пользователь авторизован
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/');
-    }
-  }, [isAuthenticated, navigate]);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -45,63 +24,100 @@ const Login = () => {
       setLoading(true);
       
       console.log('Login: Отправка запроса на вход...');
-      console.log(`Login: URL для входа: ${API_URL}/login`);
       
-      const response = await axios.post(`${API_URL}/login`, {
-        username, 
-        password
-      });
+      // Используем прямой XMLHttpRequest для максимального контроля
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API_URL}/login`, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.responseType = 'text';
       
-      // Проверяем, смонтирован ли еще компонент перед обновлением состояния
-      if (!mountedRef.current) return;
-      
-      console.log('Login: Успешный ответ:', response.status, response.statusText);
-      
-      if (response.data && response.data.token) {
-        // Успешный вход
-        await login(response.data.token, response.data.user);
+      xhr.onload = function() {
+        console.log(`Login: Получен ответ, статус: ${xhr.status}`);
         
-        // Проверяем, смонтирован ли еще компонент перед навигацией
-        if (!mountedRef.current) return;
-        
-        navigate('/');
-      } else {
-        console.error('Login: Неверный формат ответа:', response.data);
-        if (mountedRef.current) {
-          setError('Неверный формат ответа от сервера');
-        }
-      }
-    } catch (err) {
-      console.error('Login: Ошибка входа:', err);
-      
-      // Проверяем, смонтирован ли еще компонент перед обновлением состояния
-      if (!mountedRef.current) return;
-      
-      // Детальная информация об ошибке для отладки
-      if (err.response) {
-        console.error('Login: Детали ошибки:', {
-          status: err.response.status,
-          statusText: err.response.statusText,
-          data: err.response.data,
-          headers: err.response.headers
-        });
-        
-        if (err.response.data && err.response.data.error) {
-          setError(err.response.data.error);
+        if (xhr.status === 200) {
+          try {
+            // Вывод полного содержимого ответа для отладки
+            console.log('Login: Полный ответ от сервера:', xhr.responseText);
+            
+            // Парсим JSON-ответ
+            const response = JSON.parse(xhr.responseText);
+            console.log('Login: Ответ успешно распарсен, содержит поля:', Object.keys(response));
+            
+            if (response.token) {
+              console.log('Login: Токен найден в ответе, длина:', response.token.length);
+              
+              // Сохраняем токен в localStorage
+              try {
+                localStorage.setItem('auth_token', response.token);
+                localStorage.setItem('token', response.token);
+                console.log('Login: Токен сохранен в localStorage');
+                
+                // Проверяем, что токен сохранился
+                const savedToken = localStorage.getItem('token');
+                if (savedToken) {
+                  console.log('Login: Токен успешно сохранен, первые 10 символов:', savedToken.substring(0, 10));
+                  
+                  if (response.user) {
+                    localStorage.setItem('user_data', JSON.stringify(response.user));
+                    console.log('Login: Данные пользователя сохранены:', response.user.username);
+                  }
+                  
+                  // Устанавливаем заголовок авторизации для будущих запросов
+                  axios.defaults.headers.common['Authorization'] = `Bearer ${response.token}`;
+                  
+                  // Выводим сообщение о перенаправлении
+                  console.log('Login: Выполняем перенаправление на главную страницу...');
+                  
+                  // Жестко перенаправляем на домашнюю страницу
+                  window.location.href = '/';
+                } else {
+                  console.error('Login: Ошибка сохранения токена в localStorage');
+                  setError('Не удалось сохранить токен авторизации');
+                  setLoading(false);
+                }
+              } catch (storageError) {
+                console.error('Login: Ошибка при работе с localStorage:', storageError);
+                setError('Ошибка при работе с localStorage: ' + storageError.message);
+                setLoading(false);
+              }
+            } else {
+              console.error('Login: В ответе нет токена:', response);
+              setError('Сервер вернул неверный формат ответа');
+              setLoading(false);
+            }
+          } catch (parseError) {
+            console.error('Login: Ошибка разбора JSON:', parseError, 'Текст ответа:', xhr.responseText);
+            setError('Ошибка при разборе ответа сервера');
+            setLoading(false);
+          }
         } else {
-          setError(`Ошибка входа: ${err.response.status} ${err.response.statusText}`);
+          console.error('Login: Сервер вернул ошибку:', xhr.status, xhr.statusText);
+          setError(`Ошибка сервера: ${xhr.status} ${xhr.statusText}`);
+          setLoading(false);
         }
-      } else if (err.request) {
-        console.error('Login: Запрос отправлен, но ответа нет:', err.request);
-        setError('Сервер не отвечает. Проверьте подключение к интернету.');
-      } else {
-        console.error('Login: Ошибка настройки запроса:', err.message);
-        setError(`Ошибка: ${err.message}`);
-      }
-    } finally {
-      if (mountedRef.current) {
+      };
+      
+      xhr.onerror = function() {
+        console.error('Login: Сетевая ошибка при запросе');
+        setError('Ошибка сети при выполнении запроса');
         setLoading(false);
-      }
+      };
+      
+      xhr.ontimeout = function() {
+        console.error('Login: Таймаут запроса');
+        setError('Превышено время ожидания ответа от сервера');
+        setLoading(false);
+      };
+      
+      // Отправляем запрос
+      const data = JSON.stringify({ username, password });
+      console.log('Login: Отправка данных:', { username, password: '*****' });
+      xhr.send(data);
+      
+    } catch (err) {
+      console.error('Login: Необработанная ошибка:', err);
+      setError('Произошла неизвестная ошибка');
+      setLoading(false);
     }
   };
 

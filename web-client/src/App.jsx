@@ -16,29 +16,31 @@ import Profile from './components/profile/Profile';
 import Settings from './components/settings/Settings';
 import NotFound from './components/common/NotFound';
 
-// Защищенные маршруты с проверкой аутентификации
+// Упрощенные защищенные маршруты
 const PrivateRoute = ({ children }) => {
-  const { isAuthenticated } = useAuth();
-  const location = useLocation();
+  const { isAuthenticated, loading } = useAuth();
   
-  if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  if (loading) {
+    return <div className="spinner-container"><div className="spinner"></div></div>;
   }
   
-  return children;
+  return isAuthenticated ? children : <Navigate to="/login" />;
 };
 
 // Защищенные маршруты для администратора
 const AdminRoute = ({ children }) => {
-  const { user, isAuthenticated } = useAuth();
-  const location = useLocation();
+  const { user, isAuthenticated, loading } = useAuth();
+  
+  if (loading) {
+    return <div className="spinner-container"><div className="spinner"></div></div>;
+  }
   
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/login" />;
   }
   
   if (user?.role !== 'admin') {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/" />;
   }
   
   return children;
@@ -46,37 +48,22 @@ const AdminRoute = ({ children }) => {
 
 // Обертка для публичных маршрутов
 const PublicRoute = ({ children }) => {
-  const { isAuthenticated } = useAuth();
-  
-  if (isAuthenticated) {
-    return <Navigate to="/" replace />;
-  }
-  
-  return children;
-};
-
-// Обертка над защищенными маршрутами с учетом Layout
-const PrivateRouteWrapper = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
-  const location = useLocation();
   
   if (loading) {
-    return <Container className="text-center mt-5"><div className="spinner"></div></Container>;
+    return <div className="spinner-container"><div className="spinner"></div></div>;
   }
   
-  if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-  
-  return children;
+  return !isAuthenticated ? children : <Navigate to="/" />;
 };
 
 // Главный компонент приложения
 const App = () => {
-  const { checkSession, loading, isAuthenticated } = useAuth();
+  const { checkSession, loading } = useAuth();
   
   // Проверяем аутентификацию при загрузке
   useEffect(() => {
+    console.log('App: Запуск проверки сессии');
     checkSession();
   }, [checkSession]);
   
@@ -105,9 +92,9 @@ const App = () => {
       
       {/* Защищенные маршруты внутри Layout */}
       <Route path="/" element={
-        <PrivateRouteWrapper>
+        <PrivateRoute>
           <Layout />
-        </PrivateRouteWrapper>
+        </PrivateRoute>
       }>
         <Route index element={<Chat />} />
         <Route path="profile" element={<Profile />} />

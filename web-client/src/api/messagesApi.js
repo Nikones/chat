@@ -50,7 +50,7 @@ if (process.env.NODE_ENV !== 'production') {
  * @returns {Promise} - Промис с ответом API
  */
 export const getChats = () => {
-  return api.get('/api/chats');
+  return api.get('/api/chat');
 };
 
 /**
@@ -59,7 +59,7 @@ export const getChats = () => {
  * @returns {Promise} - Промис с ответом API
  */
 export const getMessages = (chatId) => {
-  return api.get(`/api/chats/${chatId}/messages`);
+  return api.get(`/api/chat/${chatId}/messages`);
 };
 
 /**
@@ -69,7 +69,7 @@ export const getMessages = (chatId) => {
  * @returns {Promise} - Промис с ответом API
  */
 export const sendMessage = (chatId, data) => {
-  return api.post(`/api/chats/${chatId}/messages`, data);
+  return api.post(`/api/chat/${chatId}/messages`, data);
 };
 
 /**
@@ -97,7 +97,7 @@ export const editMessage = (messageId, data) => {
  * @returns {Promise} - Промис с ответом API
  */
 export const markAsRead = (chatId) => {
-  return api.post(`/api/chats/${chatId}/read`);
+  return api.post(`/api/chat/${chatId}/read`);
 };
 
 /**
@@ -106,7 +106,7 @@ export const markAsRead = (chatId) => {
  * @returns {Promise} - Промис с ответом API
  */
 export const createChat = (data) => {
-  return api.post('/api/chats', data);
+  return api.post('/api/chat', data);
 };
 
 /**
@@ -115,7 +115,7 @@ export const createChat = (data) => {
  * @returns {Promise} - Промис с ответом API
  */
 export const getChat = (chatId) => {
-  return api.get(`/api/chats/${chatId}`);
+  return api.get(`/api/chat/${chatId}`);
 };
 
 /**
@@ -124,7 +124,7 @@ export const getChat = (chatId) => {
  * @returns {Promise} - Промис с ответом API
  */
 export const leaveChat = (chatId) => {
-  return api.post(`/api/chats/${chatId}/leave`);
+  return api.post(`/api/chat/${chatId}/leave`);
 };
 
 /**
@@ -134,7 +134,7 @@ export const leaveChat = (chatId) => {
  * @returns {Promise} - Промис с ответом API
  */
 export const addUserToChat = (chatId, userId) => {
-  return api.post(`/api/chats/${chatId}/users`, { user_id: userId });
+  return api.post(`/api/chat/${chatId}/users`, { user_id: userId });
 };
 
 /**
@@ -144,7 +144,7 @@ export const addUserToChat = (chatId, userId) => {
  * @returns {Promise} - Промис с ответом API
  */
 export const removeUserFromChat = (chatId, userId) => {
-  return api.delete(`/api/chats/${chatId}/users/${userId}`);
+  return api.delete(`/api/chat/${chatId}/users/${userId}`);
 };
 
 /**
@@ -154,7 +154,7 @@ export const removeUserFromChat = (chatId, userId) => {
  * @returns {Promise} - Промис с ответом API
  */
 export const updateChat = (chatId, data) => {
-  return api.put(`/api/chats/${chatId}`, data);
+  return api.put(`/api/chat/${chatId}`, data);
 };
 
 export default api; 
