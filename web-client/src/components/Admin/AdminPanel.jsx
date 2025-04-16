@@ -92,7 +92,12 @@ const AdminPanel = () => {
   
   // Обработчик изменения настройки регистрации
   const handleToggleRegistration = async () => {
-    await toggleRegistration(!settings.registrationEnabled);
+    if (settings) {
+      await toggleRegistration(!settings.registrationEnabled);
+    } else {
+      console.error('Ошибка: настройки не загружены');
+      setApiError('Не удалось изменить настройки регистрации. Настройки не загружены.');
+    }
   };
   
   // Обработчик изменения формы пользователя
@@ -279,6 +284,7 @@ const AdminPanel = () => {
         </Card.Header>
         <Card.Body>
           {error && <Alert variant="danger">{error}</Alert>}
+          {apiError && <Alert variant="danger">{apiError}</Alert>}
           
           <Tab.Container id="admin-tabs" defaultActiveKey="dashboard">
             <Row>
@@ -473,13 +479,19 @@ const AdminPanel = () => {
                   <Tab.Pane eventKey="settings">
                     <h5 className="mb-4">Настройки системы</h5>
                     
+                    {loading ? (
+                      <div className="text-center py-5">
+                        <Spinner animation="border" variant="primary" />
+                        <p className="mt-2">Загрузка настроек...</p>
+                      </div>
+                    ) : (
                     <Form>
                       <Form.Group className="mb-3">
                         <Form.Check 
                           type="switch"
                           id="registration-enabled"
                           label="Регистрация пользователей разрешена"
-                          checked={settings.registrationEnabled}
+                          checked={settings?.registrationEnabled}
                           onChange={handleToggleRegistration}
                         />
                         <Form.Text className="text-muted">
@@ -491,8 +503,8 @@ const AdminPanel = () => {
                         <Form.Label>Максимальный размер загружаемых файлов (МБ)</Form.Label>
                         <Form.Control 
                           type="number" 
-                          value={settings.maxUploadSize} 
-                          onChange={(e) => updateSettings({ maxUploadSize: parseInt(e.target.value, 10) })}
+                          value={settings?.maxUploadSize} 
+                          onChange={(e) => settings && updateSettings({ maxUploadSize: parseInt(e.target.value, 10) })}
                           min="1"
                           max="100"
                         />
@@ -502,8 +514,8 @@ const AdminPanel = () => {
                         <Form.Label>Время хранения сообщений (дней)</Form.Label>
                         <Form.Control 
                           type="number" 
-                          value={settings.messageRetentionDays} 
-                          onChange={(e) => updateSettings({ messageRetentionDays: parseInt(e.target.value, 10) })}
+                          value={settings?.messageRetentionDays} 
+                          onChange={(e) => settings && updateSettings({ messageRetentionDays: parseInt(e.target.value, 10) })}
                           min="1"
                         />
                         <Form.Text className="text-muted">
@@ -515,8 +527,8 @@ const AdminPanel = () => {
                         <Form.Label>Максимальное время звонка (секунд)</Form.Label>
                         <Form.Control 
                           type="number" 
-                          value={settings.callTimeout} 
-                          onChange={(e) => updateSettings({ callTimeout: parseInt(e.target.value, 10) })}
+                          value={settings?.callTimeout} 
+                          onChange={(e) => settings && updateSettings({ callTimeout: parseInt(e.target.value, 10) })}
                           min="10"
                           max="300"
                         />
@@ -529,13 +541,14 @@ const AdminPanel = () => {
                         <Form.Label>Максимальное количество участников в групповом чате</Form.Label>
                         <Form.Control 
                           type="number" 
-                          value={settings.maxGroupSize} 
-                          onChange={(e) => updateSettings({ maxGroupSize: parseInt(e.target.value, 10) })}
+                          value={settings?.maxGroupSize} 
+                          onChange={(e) => settings && updateSettings({ maxGroupSize: parseInt(e.target.value, 10) })}
                           min="2"
                           max="100"
                         />
                       </Form.Group>
                     </Form>
+                    )}
                   </Tab.Pane>
                 </Tab.Content>
               </Col>

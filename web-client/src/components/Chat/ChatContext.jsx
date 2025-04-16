@@ -85,167 +85,174 @@ export const ChatProvider = ({ children }) => {
 
       console.log('ChatContext: Попытка подключения к WebSocket:', wsUrl.split('?')[0], 'с токеном в URL');
       
-      console.log('ChatContext: Устанавливаем таймер на 1 секунду перед подключением для отладки');
-      setTimeout(() => {
-        console.log('ChatContext: Создаем WebSocket соединение после задержки');
-        const ws = new WebSocket(wsUrl);
+      // Создаем одно WebSocket соединение без таймеров и задержек
+      const ws = new WebSocket(wsUrl);
 
-        ws.onopen = () => {
-          console.log('ChatContext: WebSocket соединение установлено успешно');
-          // После установки соединения нет необходимости отправлять токен,
-          // т.к. он уже передан в URL
-        };
+      ws.onopen = () => {
+        console.log('ChatContext: WebSocket соединение установлено успешно');
+      };
 
-        ws.onmessage = async (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            console.log('Получено WebSocket сообщение:', data.type);
+      ws.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('Получено WebSocket сообщение:', data.type);
 
-            switch (data.type) {
-              case 'text':
-                // Обрабатываем текстовое сообщение
-                const content = data.content;
-                
-                // Если сообщение зашифровано, расшифровываем его
-                if (content && content.content) {
-                  try {
-                    // Расшифровываем сообщение
-                    const decryptedContent = await decryptMessage(
-                      signalProtocol,
-                      content.sender_id,
-                      content.content
-                    );
-                    
-                    content.content = decryptedContent;
-                  } catch (decryptError) {
-                    console.error('Ошибка расшифровки сообщения:', decryptError);
-                    // В случае ошибки расшифровки используем оригинальный контент
-                    content.content = content.content + ' [Ошибка расшифровки]';
-                  }
-                }
-
-                // Обновляем состояние сообщений
-                setMessages(prevMessages => {
-                  const userId = content.sender_id !== currentUser.id 
-                    ? content.sender_id 
-                    : content.recipient_id;
-                  
-                  const userMessages = prevMessages[userId] || [];
-                  
-                  // Проверяем, нет ли уже такого сообщения
-                  const messageExists = userMessages.some(msg => msg.id === content.id);
-                  
-                  if (messageExists) {
-                    return prevMessages;
-                  }
-                  
-                  // Добавляем новое сообщение
-                  const newUserMessages = [...userMessages, content].sort(
-                    (a, b) => new Date(a.created_at) - new Date(b.created_at)
+          switch (data.type) {
+            case 'text':
+              // Обрабатываем текстовое сообщение
+              const content = data.content;
+              
+              // Если сообщение зашифровано, расшифровываем его
+              if (content && content.content) {
+                try {
+                  // Расшифровываем сообщение
+                  const decryptedContent = await decryptMessage(
+                    signalProtocol,
+                    content.sender_id,
+                    content.content
                   );
+                  
+                  content.content = decryptedContent;
+                } catch (decryptError) {
+                  console.error('Ошибка расшифровки сообщения:', decryptError);
+                  // В случае ошибки расшифровки используем оригинальный контент
+                  content.content = content.content + ' [Ошибка расшифровки]';
+                }
+              }
+
+              // Обновляем состояние сообщений
+              setMessages(prevMessages => {
+                const userId = content.sender_id !== currentUser.id 
+                  ? content.sender_id 
+                  : content.recipient_id;
+                
+                const userMessages = prevMessages[userId] || [];
+                
+                // Проверяем, нет ли уже такого сообщения
+                const messageExists = userMessages.some(msg => msg.id === content.id);
+                
+                if (messageExists) {
+                  return prevMessages;
+                }
+                
+                // Добавляем новое сообщение
+                const newUserMessages = [...userMessages, content].sort(
+                  (a, b) => new Date(a.created_at) - new Date(b.created_at)
+                );
+                
+                return {
+                  ...prevMessages,
+                  [userId]: newUserMessages
+                };
+              });
+
+              // Обновляем счетчик непрочитанных сообщений
+              if (content.sender_id !== currentUser.id && 
+                  (!selectedUser || selectedUser.id !== content.sender_id)) {
+                setUnreadCounts(prev => ({
+                  ...prev,
+                  [content.sender_id]: (prev[content.sender_id] || 0) + 1
+                }));
+              }
+              break;
+
+            case 'read_receipt':
+              // Обрабатываем уведомление о прочтении сообщений
+              const readReceipt = data.content;
+              
+              if (readReceipt && readReceipt.reader_id) {
+                // Отмечаем сообщения как прочитанные
+                setMessages(prevMessages => {
+                  const userMessages = prevMessages[readReceipt.reader_id] || [];
+                  
+                  // Помечаем все сообщения как прочитанные
+                  const updatedMessages = userMessages.map(msg => ({
+                    ...msg,
+                    is_read: true
+                  }));
                   
                   return {
                     ...prevMessages,
-                    [userId]: newUserMessages
+                    [readReceipt.reader_id]: updatedMessages
                   };
                 });
+              }
+              break;
 
-                // Обновляем счетчик непрочитанных сообщений
-                if (content.sender_id !== currentUser.id && 
-                    (!selectedUser || selectedUser.id !== content.sender_id)) {
-                  setUnreadCounts(prev => ({
-                    ...prev,
-                    [content.sender_id]: (prev[content.sender_id] || 0) + 1
-                  }));
-                }
-                break;
+            case 'call_offer':
+              // Обработка предложения звонка
+              console.log('Получено предложение звонка:', data.content);
+              // Здесь будет логика обработки звонков
+              break;
+              
+            case 'call_answer':
+              // Обработка ответа на звонок
+              console.log('Получен ответ на звонок:', data.content);
+              // Здесь будет логика обработки ответа на звонок
+              break;
+              
+            case 'ice_candidate':
+              // Обработка ICE кандидата
+              console.log('Получен ICE кандидат:', data.content);
+              // Здесь будет логика обработки ICE кандидатов
+              break;
 
-              case 'read_receipt':
-                // Обрабатываем уведомление о прочтении сообщений
-                const readReceipt = data.content;
-                
-                if (readReceipt && readReceipt.reader_id) {
-                  // Отмечаем сообщения как прочитанные
-                  setMessages(prevMessages => {
-                    const userMessages = prevMessages[readReceipt.reader_id] || [];
-                    
-                    // Помечаем все сообщения как прочитанные
-                    const updatedMessages = userMessages.map(msg => ({
-                      ...msg,
-                      is_read: true
-                    }));
-                    
-                    return {
-                      ...prevMessages,
-                      [readReceipt.reader_id]: updatedMessages
-                    };
-                  });
-                }
-                break;
-
-              case 'call_offer':
-                // Обработка предложения звонка
-                console.log('Получено предложение звонка:', data.content);
-                // Здесь будет логика обработки звонков
-                break;
-                
-              case 'call_answer':
-                // Обработка ответа на звонок
-                console.log('Получен ответ на звонок:', data.content);
-                // Здесь будет логика обработки ответа на звонок
-                break;
-                
-              case 'ice_candidate':
-                // Обработка ICE кандидата
-                console.log('Получен ICE кандидат:', data.content);
-                // Здесь будет логика обработки ICE кандидатов
-                break;
-
-              default:
-                console.log('Неизвестный тип сообщения:', data.type);
-            }
-          } catch (error) {
-            console.error('Ошибка обработки WebSocket сообщения:', error);
+            default:
+              console.log('Неизвестный тип сообщения:', data.type);
           }
-        };
+        } catch (error) {
+          console.error('Ошибка обработки WebSocket сообщения:', error);
+        }
+      };
 
-        ws.onerror = (error) => {
-          console.error('ChatContext: Ошибка WebSocket соединения. Объект события:', error);
-          setIsConnected(false);
-        };
+      ws.onerror = (error) => {
+        console.error('ChatContext: Ошибка WebSocket соединения. Объект события:', error);
+        setIsConnected(false);
+      };
 
-        ws.onclose = (event) => {
-          console.log('ChatContext: WebSocket соединение закрыто. Детали:', { 
-            code: event.code, 
-            reason: event.reason, 
-            wasClean: event.wasClean 
-          });
-          setIsConnected(false);
-          
-          // Повторное подключение через 5 секунд
+      ws.onclose = (event) => {
+        console.log('ChatContext: WebSocket соединение закрыто. Детали:', { 
+          code: event.code, 
+          reason: event.reason, 
+          wasClean: event.wasClean 
+        });
+        setIsConnected(false);
+        
+        // Повторное подключение через 5 секунд если закрытие было неожиданным
+        if (event.code !== 1000 && event.code !== 1001) {
           setTimeout(() => {
             console.log('Попытка переподключения...');
             setSocket(null);
           }, 5000);
-        };
+        }
+      };
 
-        setSocket(ws);
-        setIsConnected(true);
+      setSocket(ws);
+      setIsConnected(true);
 
-        // Закрытие соединения при размонтировании компонента
-        return () => {
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.close();
+      // Запускаем пинг каждые 3 минуты для поддержания соединения
+      const pingInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          try {
+            const pingMsg = {
+              type: 'ping',
+              content: { timestamp: new Date().toISOString() }
+            };
+            ws.send(JSON.stringify(pingMsg));
+            console.log('ChatContext: Отправлен ping для поддержания соединения');
+          } catch (err) {
+            console.error('ChatContext: Ошибка отправки ping:', err);
           }
-        };
-      }, 1000);
-      
-      // Добавляем прямое тестовое подключение для диагностики
-      console.log('ChatContext: Добавляем тестовое подключение напрямую для диагностики');
-      const testWs = new WebSocket(wsUrl, protocols);
-      testWs.onopen = () => console.log('ТЕСТ ChatContext: WebSocket соединение открыто успешно');
-      testWs.onerror = (e) => console.error('ТЕСТ ChatContext: Ошибка WebSocket соединения', e);
-      testWs.onclose = (e) => console.log('ТЕСТ ChatContext: WebSocket соединение закрыто', e.code, e.reason);
+        }
+      }, 180000); // 3 минуты
+
+      // Закрытие соединения при размонтировании компонента
+      return () => {
+        clearInterval(pingInterval);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        }
+      };
     }
   }, [currentUser, isAuthenticated, logout, navigate, signalProtocol]);
 

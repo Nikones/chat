@@ -3,14 +3,27 @@ import { useAuth } from './AuthContext';
 import { useWebSocket } from './WebSocketContext';
 import * as api from '../api/messagesApi';
 
-// Создаем контекст для сообщений
-const MessageContext = createContext(null);
+// Создаем контекст с дефолтными значениями чтобы избежать null
+const MessageContext = createContext({
+  chats: [],
+  activeChat: null,
+  messages: [],
+  loading: false,
+  error: null,
+  typingUsers: {},
+  setActiveConversation: () => {},
+  sendNewMessage: () => {},
+  sendTypingStatus: () => {},
+  loadChats: () => {},
+  loadMoreMessages: () => {},
+  createChat: () => {},
+});
 
 // Хук для использования контекста сообщений
 export const useMessage = () => {
   const context = useContext(MessageContext);
   if (!context) {
-    throw new Error('useMessage должен использоваться внутри MessageProvider');
+    console.error('useMessage должен использоваться внутри MessageProvider');
   }
   return context;
 };
@@ -20,7 +33,13 @@ export const useMessages = useMessage;
 
 export const MessageProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
-  const { isConnected, sendMessage, lastMessage, ready: wsReady } = useWebSocket();
+  const ws = useWebSocket();
+  
+  // Обезопасим доступ к свойствам из WebSocketContext
+  const isConnected = ws?.isConnected || false;
+  const sendMessage = ws?.sendMessage || (() => console.warn('sendMessage не доступен'));
+  const lastMessage = ws?.lastMessage;
+  const wsReady = ws?.ready || false;
   
   // Состояние для чатов и сообщений
   const [chats, setChats] = useState([]);
@@ -29,6 +48,7 @@ export const MessageProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [typingUsers, setTypingUsers] = useState({});
+  const [lastChatsRequest, setLastChatsRequest] = useState(0); // Добавляем состояние для отслеживания времени последнего запроса
   
   // Реф для отслеживания монтирования компонента
   const mountedRef = useRef(true);
@@ -123,8 +143,8 @@ export const MessageProvider = ({ children }) => {
       
       if (!mountedRef.current) return;
       
-      console.log(`MessageContext: Получено ${response.data?.length || 0} сообщений для чата ${chatId}`);
-      setMessages(response.data || []);
+      console.log(`MessageContext: Получено ${response?.data?.length || 0} сообщений для чата ${chatId}`);
+      setMessages(response?.data || []);
     } catch (err) {
       console.error(`MessageContext: Ошибка загрузки сообщений для чата ${chatId}:`, err);
       
@@ -145,23 +165,33 @@ export const MessageProvider = ({ children }) => {
       return;
     }
     
+    // Проверяем, прошло ли достаточно времени с последнего запроса (не менее 2 секунд)
+    const now = Date.now();
+    if (now - lastChatsRequest < 2000) {
+      console.log('MessageContext: Запрос списка чатов был недавно, пропускаем');
+      return;
+    }
+    
     console.log('MessageContext: Загрузка списка чатов');
     setLoading(true);
     setError(null);
+    setLastChatsRequest(now); // Обновляем время последнего запроса
     
     try {
       const data = await api.getChats();
       
       if (!mountedRef.current) return;
       
-      console.log(`MessageContext: Получено ${data?.length || 0} чатов`);
-      setChats(data);
+      // Проверяем, что data не null и не undefined
+      const chatsData = data || [];
+      console.log(`MessageContext: Получено ${chatsData.length || 0} чатов`);
+      setChats(chatsData);
       
       // Если есть чаты и нет активного, устанавливаем первый чат активным
-      if (mountedRef.current && data.length > 0 && !activeChat) {
-        console.log(`MessageContext: Установка первого чата (${data[0].id}) как активного`);
-        setActiveChat(data[0]);
-        loadMessages(data[0].id);
+      if (mountedRef.current && chatsData.length > 0 && !activeChat) {
+        console.log(`MessageContext: Установка первого чата (${chatsData[0].id}) как активного`);
+        setActiveChat(chatsData[0]);
+        loadMessages(chatsData[0].id);
       }
     } catch (err) {
       console.error('MessageContext: Ошибка загрузки чатов:', err);
@@ -174,7 +204,7 @@ export const MessageProvider = ({ children }) => {
         setLoading(false);
       }
     }
-  }, [isAuthenticated, activeChat, loadMessages]);
+  }, [isAuthenticated, activeChat, loadMessages, lastChatsRequest]);
   
   // Установка активного чата
   const setActiveConversation = useCallback((chatId) => {
@@ -195,46 +225,52 @@ export const MessageProvider = ({ children }) => {
   useEffect(() => {
     console.log(`MessageContext: Состояние для загрузки чатов - isAuthenticated: ${isAuthenticated}, wsReady: ${wsReady}`);
     
-    if (isAuthenticated && wsReady && mountedRef.current) {
-      console.log('MessageContext: Условия соблюдены, загружаем чаты');
-      loadChats();
-    } else if (!isAuthenticated) {
-      // Сбрасываем состояние при выходе
-      console.log('MessageContext: Сброс состояния при выходе из системы');
-      setChats([]);
-      setActiveChat(null);
-      setMessages([]);
-      setTypingUsers({});
-    }
+    // Ограничиваем частый вызов эффекта
+    const timer = setTimeout(() => {
+      if (isAuthenticated && mountedRef.current) {
+        console.log('MessageContext: Условия соблюдены, загружаем чаты');
+        loadChats();
+      } else if (!isAuthenticated) {
+        // Сбрасываем состояние при выходе
+        console.log('MessageContext: Сброс состояния при выходе из системы');
+        setChats([]);
+        setActiveChat(null);
+        setMessages([]);
+        setTypingUsers({});
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
   }, [isAuthenticated, wsReady, loadChats]);
   
   // Эффект для обработки сообщений через WebSocket
   useEffect(() => {
-    // Проверяем все необходимые условия
-    if (!mountedRef.current || !wsReady || !isConnected || !lastMessage?.data) {
-      const missingConditions = [];
-      if (!mountedRef.current) missingConditions.push('компонент размонтирован');
-      if (!wsReady) missingConditions.push('WebSocket не готов');
-      if (!isConnected) missingConditions.push('WebSocket не подключен');
-      if (!lastMessage?.data) missingConditions.push('нет данных сообщения');
-      
-      if (missingConditions.length > 0) {
-        console.log(`MessageContext: Пропуск обработки WebSocket сообщения. Причина: ${missingConditions.join(', ')}`);
-      }
+    // Проверяем, что у нас есть хотя бы основные компоненты сообщения
+    if (!mountedRef.current || !lastMessage || !lastMessage.data) {
       return;
     }
     
     try {
       const { data } = lastMessage;
+      
+      // Проверяем тип сообщения
+      if (!data || !data.type) {
+        return;
+      }
+      
       console.log('MessageContext: Получено сообщение WebSocket:', data.type);
       
       // Обработка сообщений в зависимости от типа
       switch (data.type) {
         case 'message':
-          handleMessageEvent(data.payload);
+          if (data.payload) {
+            handleMessageEvent(data.payload);
+          }
           break;
         case 'typing':
-          handleTypingEvent(data.payload);
+          if (data.payload) {
+            handleTypingEvent(data.payload);
+          }
           break;
         default:
           console.log(`MessageContext: Неизвестный тип сообщения: ${data.type}`);
@@ -243,137 +279,160 @@ export const MessageProvider = ({ children }) => {
     } catch (err) {
       console.error('MessageContext: Ошибка при обработке WebSocket сообщения:', err);
     }
-  }, [lastMessage, wsReady, isConnected, handleMessageEvent, handleTypingEvent]);
+  }, [lastMessage, handleMessageEvent, handleTypingEvent]);
+  
+  // Отправка статуса печатания
+  const sendTypingStatus = useCallback((chatId, isTyping) => {
+    if (!isConnected || !isAuthenticated || !chatId) {
+      return false;
+    }
+    
+    try {
+      console.log(`MessageContext: Отправка статуса печатания ${isTyping ? 'начал печатать' : 'закончил печатать'} для чата ${chatId}`);
+      
+      const payload = {
+        type: 'typing',
+        payload: {
+          chat_id: chatId,
+          is_typing: isTyping
+        }
+      };
+      
+      sendMessage(payload);
+      return true;
+    } catch (err) {
+      console.error('MessageContext: Ошибка при отправке статуса печатания:', err);
+      return false;
+    }
+  }, [isConnected, isAuthenticated, sendMessage]);
   
   // Отправка сообщения
   const sendNewMessage = useCallback(async (chatId, content, attachments = []) => {
     if (!isAuthenticated || !chatId) {
-      console.warn(`MessageContext: Невозможно отправить сообщение. Аутентификация: ${isAuthenticated}, chatId: ${chatId}`);
-      return null;
+      console.log(`MessageContext: Невозможно отправить сообщение. Аутентифицирован: ${isAuthenticated}, chatId: ${chatId}`);
+      return false;
     }
     
     console.log(`MessageContext: Отправка сообщения в чат ${chatId}`);
+    setLoading(true);
     
     try {
-      // Создаем временное сообщение для отображения
-      const tempId = `temp-${Date.now()}`;
-      const tempMessage = {
-        id: tempId,
-        chat_id: chatId,
-        sender_id: user?.id,
-        content,
-        attachments,
-        created_at: new Date().toISOString(),
-        status: 'sending'
-      };
+      const response = await api.sendMessage(chatId, content, attachments);
       
-      // Добавляем временное сообщение в список
-      setMessages(prev => [...prev, tempMessage]);
+      if (!mountedRef.current) return false;
       
-      // Отправляем сообщение через API
-      const response = await api.sendMessage(chatId, {
-        content,
-        attachments
+      console.log(`MessageContext: Сообщение успешно отправлено в чат ${chatId}`, response.data);
+      
+      // Обновляем список сообщений
+      setMessages(prev => {
+        if (response.data && !prev.some(m => m.id === response.data.id)) {
+          return [...prev, response.data];
+        }
+        return prev;
       });
       
-      if (!mountedRef.current) return null;
-      
-      // Обрабатываем ответ сервера
-      const messageData = response.data;
-      console.log(`MessageContext: Сообщение успешно отправлено, id: ${messageData.id}`);
-      
-      // Заменяем временное сообщение на реальное
-      setMessages(prev => prev.map(m => 
-        m.id === tempId ? messageData : m
-      ));
-      
       // Обновляем список чатов с новым последним сообщением
-      setChats(prev => prev.map(chat => 
-        chat.id === chatId ? {
-          ...chat,
-          last_message: messageData
-        } : chat
-      ));
+      setChats(prev => {
+        return prev.map(chat => {
+          if (chat.id === chatId) {
+            return {
+              ...chat,
+              last_message: response.data
+            };
+          }
+          return chat;
+        });
+      });
       
-      // Отправляем уведомление через WebSocket, если соединение активно
-      if (wsReady && isConnected) {
-        try {
-          console.log(`MessageContext: Отправка уведомления через WebSocket для сообщения ${messageData.id}`);
-          sendMessage('message_notification', {
-            chat_id: chatId,
-            message_id: messageData.id
-          });
-        } catch (wsError) {
-          console.error('MessageContext: Ошибка при отправке уведомления через WebSocket:', wsError);
-          // Не прерываем выполнение основной функции
-        }
-      }
-      
-      return messageData;
+      return true;
     } catch (err) {
       console.error(`MessageContext: Ошибка отправки сообщения в чат ${chatId}:`, err);
       
       if (mountedRef.current) {
-        // Обновляем статус временного сообщения на ошибку
-        setMessages(prev => prev.map(m => 
-          m.id === `temp-${Date.now()}` ? { ...m, status: 'error' } : m
-        ));
-        
         setError('Не удалось отправить сообщение');
       }
       
-      return null;
+      return false;
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
-  }, [isAuthenticated, user, wsReady, isConnected, sendMessage]);
+  }, [isAuthenticated]);
   
-  // Отправка статуса набора текста
-  const sendTypingStatus = useCallback((chatId, isTyping) => {
-    if (!wsReady || !isConnected || !isAuthenticated || !chatId) {
-      console.log(`MessageContext: Пропуск отправки статуса набора. WebSocket готов: ${wsReady}, подключен: ${isConnected}`);
-      return;
+  // Загрузка дополнительных сообщений (постраничная загрузка)
+  const loadMoreMessages = useCallback(async (chatId, offset) => {
+    if (!mountedRef.current || !isAuthenticated || !chatId) {
+      return false;
     }
     
+    console.log(`MessageContext: Загрузка дополнительных сообщений для чата ${chatId}, смещение: ${offset}`);
+    setLoading(true);
+    
     try {
-      console.log(`MessageContext: Отправка статуса набора текста для чата ${chatId}: ${isTyping ? 'печатает' : 'остановился'}`);
-      sendMessage('typing', {
-        chat_id: chatId,
-        is_typing: isTyping
+      const response = await api.getMessages(chatId, { offset });
+      
+      if (!mountedRef.current) return false;
+      
+      console.log(`MessageContext: Получено еще ${response?.data?.length || 0} сообщений для чата ${chatId}`);
+      
+      // Добавляем сообщения в начало списка
+      setMessages(prev => {
+        // Фильтруем дубликаты по id
+        const newMessages = (response?.data || []).filter(
+          newMsg => !prev.some(existingMsg => existingMsg.id === newMsg.id)
+        );
+        
+        return [...newMessages, ...prev];
       });
-    } catch (error) {
-      console.error('MessageContext: Ошибка при отправке статуса набора текста:', error);
+      
+      return true;
+    } catch (err) {
+      console.error(`MessageContext: Ошибка загрузки дополнительных сообщений для чата ${chatId}:`, err);
+      
+      if (mountedRef.current) {
+        setError('Не удалось загрузить дополнительные сообщения');
+      }
+      
+      return false;
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
-  }, [isAuthenticated, wsReady, isConnected, sendMessage]);
+  }, [isAuthenticated]);
   
   // Создание нового чата
-  const createChat = useCallback(async (title, participants) => {
-    if (!isAuthenticated) return null;
+  const createChat = useCallback(async (userIds, groupName = null) => {
+    if (!mountedRef.current || !isAuthenticated) {
+      return null;
+    }
     
+    console.log(`MessageContext: Создание нового чата с пользователями: ${userIds.join(', ')}`);
     setLoading(true);
-    setError(null);
     
     try {
-      const response = await api.createChat({
-        title,
-        participants
-      });
+      const response = await api.createChat(userIds, groupName);
       
       if (!mountedRef.current) return null;
       
-      const newChat = response.data;
-      console.log('MessageContext: Создан новый чат:', newChat.id);
+      console.log('MessageContext: Новый чат создан успешно', response.data);
       
       // Добавляем новый чат в список
-      setChats(prev => [newChat, ...prev]);
+      setChats(prev => [response.data, ...prev]);
       
       // Устанавливаем новый чат как активный
-      setActiveChat(newChat);
+      setActiveChat(response.data);
       
-      return newChat;
+      // Очищаем сообщения для нового чата
+      setMessages([]);
+      
+      return response.data;
     } catch (err) {
-      console.error('MessageContext: Ошибка создания чата:', err);
+      console.error('MessageContext: Ошибка создания нового чата:', err);
       
       if (mountedRef.current) {
-        setError('Не удалось создать чат');
+        setError('Не удалось создать новый чат');
       }
       
       return null;
@@ -383,8 +442,7 @@ export const MessageProvider = ({ children }) => {
       }
     }
   }, [isAuthenticated]);
-  
-  // Предоставляем контекст компонентам-потомкам
+
   const contextValue = {
     chats,
     activeChat,
@@ -393,11 +451,11 @@ export const MessageProvider = ({ children }) => {
     error,
     typingUsers,
     setActiveConversation,
-    loadChats,
-    loadMessages,
     sendNewMessage,
     sendTypingStatus,
-    createChat
+    loadChats,
+    loadMoreMessages,
+    createChat,
   };
 
   return (
@@ -407,4 +465,4 @@ export const MessageProvider = ({ children }) => {
   );
 };
 
-export default MessageProvider; 
+export default MessageContext; 

@@ -10,6 +10,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { MessageProvider } from './contexts/MessageContext';
 import { CallProvider } from './contexts/CallContext';
+import { AdminProvider } from './contexts/AdminContext';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -30,7 +31,8 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 // 1. AuthProvider должен быть первым (для аутентификации)
 // 2. WebSocketProvider после него (использует данные аутентификации)
 // 3. MessageProvider после WebSocketProvider (использует WebSocket)
-// 4. CallProvider после MessageProvider (использует Message)
+// 4. AdminProvider для функций администрирования
+// 5. CallProvider после MessageProvider (использует Message)
 
 root.render(
   <React.StrictMode>
@@ -38,20 +40,22 @@ root.render(
       <AuthProvider>
         <WebSocketProvider>
           <MessageProvider>
-            <CallProvider>
-              <App />
-              <ToastContainer 
-                position="top-right"
-                autoClose={5000}
-                hideProgressBar={false}
-                newestOnTop
-                closeOnClick
-                rtl={false}
-                pauseOnFocusLoss
-                draggable
-                pauseOnHover
-              />
-            </CallProvider>
+            <AdminProvider>
+              <CallProvider>
+                <App />
+                <ToastContainer 
+                  position="top-right"
+                  autoClose={5000}
+                  hideProgressBar={false}
+                  newestOnTop
+                  closeOnClick
+                  rtl={false}
+                  pauseOnFocusLoss
+                  draggable
+                  pauseOnHover
+                />
+              </CallProvider>
+            </AdminProvider>
           </MessageProvider>
         </WebSocketProvider>
       </AuthProvider>
