@@ -10,9 +10,11 @@ import (
 
 type Config struct {
 	Server struct {
-		Port  string `json:"port" validate:"required"`
-		Host  string `json:"host" validate:"required"`
-		Debug bool   `json:"debug"`
+		Port                string `json:"port" validate:"required"`
+		Host                string `json:"host" validate:"required"`
+		Debug               bool   `json:"debug"`
+		RegistrationEnabled bool   `json:"registration_enabled"`
+		MaintenanceMode     bool   `json:"maintenance_mode"`
 	} `json:"server"`
 
 	Database struct {

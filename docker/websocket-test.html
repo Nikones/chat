@@ -73,7 +73,6 @@
         </div>
         <div class="row">
             <button onclick="useMMAuthToken()">Использовать cookie MMAUTHTOKEN</button>
-            <button onclick="testWebSocketWithDefault()">Тест с настройками по умолчанию</button>
             <button onclick="testWebSocketWithBoth()">Тест с URL и протоколом</button>
         </div>
         <div class="row">
@@ -350,57 +349,6 @@
                 // Предлагаем пользователю выполнить вход и сохранить ответ
                 log('Выполните вход и добавьте в консоль браузера:');
                 log(`localStorage.setItem('lastLoginResponse', JSON.stringify(response.data))`);
-            }
-        }
-        
-        // Тест с настройками по умолчанию - тест для прямого тестирования
-        function testWebSocketWithDefault() {
-            // Тестовый токен - генерируем уникальный для отладки
-            const testToken = `test_token_${Date.now()}`;
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const host = window.location.host;
-            const wsUrl = `${protocol}//${host}/api/ws?token=${testToken}`;
-            log(`Тестовый WebSocket URL: ${wsUrl}`);
-            
-            try {
-                // Создаем WebSocket с тестовым токеном
-                const wsTest = new WebSocket(wsUrl);
-                log('WebSocket объект успешно создан');
-                
-                wsTest.onopen = function() {
-                    log('Тестовое WebSocket соединение установлено');
-                    // Отправляем тестовое сообщение
-                    try {
-                        wsTest.send(JSON.stringify({
-                            type: 'ping',
-                            payload: { clientTime: new Date().toISOString() }
-                        }));
-                        log('Отправлено тестовое сообщение ping');
-                    } catch (e) {
-                        log(`Ошибка отправки тестового сообщения: ${e.message}`);
-                    }
-                };
-                
-                wsTest.onerror = function(event) {
-                    log('Ошибка тестового WebSocket соединения: ' + event);
-                    console.error('WebSocket connection error:', event);
-                };
-                
-                wsTest.onmessage = function(event) {
-                    log(`Получено сообщение: ${event.data}`);
-                    try {
-                        const parsed = JSON.parse(event.data);
-                        log(`Тип сообщения: ${parsed.type}, содержимое: ${JSON.stringify(parsed.payload)}`);
-                    } catch (e) {
-                        log(`Не удалось разобрать JSON: ${e.message}`);
-                    }
-                };
-                
-                wsTest.onclose = function(event) {
-                    log(`Тестовое WebSocket соединение закрыто ${event.code} ${event.reason || ''}`);
-                };
-            } catch (e) {
-                log(`Ошибка при создании WebSocket: ${e.message}`);
             }
         }
         

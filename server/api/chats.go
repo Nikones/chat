@@ -36,6 +36,13 @@ type chatResponse struct {
 	UnreadCount int `json:"unread_count"`
 }
 
+// Структура запроса для создания чата
+type createChatRequest struct {
+	Type    string `json:"type" binding:"required,oneof=direct group"`
+	Name    string `json:"name"`                        // Для групповых чатов
+	UserIDs []uint `json:"user_ids" binding:"required"` // Для личных чатов (1 ID), для групповых (>=1 ID)
+}
+
 // handleGetChats возвращает список чатов пользователя
 func (s *Server) handleGetChats(c *gin.Context) {
 	// Получаем ID текущего пользователя из контекста (установлен middleware аутентификации)
@@ -166,7 +173,139 @@ func (s *Server) handleGetChats(c *gin.Context) {
 
 // handleCreateChat создает новый чат
 func (s *Server) handleCreateChat(c *gin.Context) {
-	// TODO: Реализовать создание чата
+	userID, exists := c.Get("userID")
+	if !exists {
+		SendUnauthorized(c, "Пользователь не авторизован")
+		return
+	}
+	currentUserID := userID.(uint)
+
+	var req createChatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		SendBadRequest(c, "Некорректные данные запроса: "+err.Error())
+		return
+	}
+
+	// Проверки в зависимости от типа чата
+	if req.Type == "direct" {
+		if len(req.UserIDs) != 1 {
+			SendBadRequest(c, "Для личного чата должен быть указан один user_id")
+			return
+		}
+		if req.UserIDs[0] == currentUserID {
+			SendBadRequest(c, "Нельзя создать чат с самим собой")
+			return
+		}
+		// TODO: Проверить, существует ли уже личный чат между этими двумя пользователями
+		req.Name = ""
+	} else if req.Type == "group" {
+		if len(req.UserIDs) < 1 {
+			SendBadRequest(c, "Для группового чата должен быть указан хотя бы один user_id")
+			return
+		}
+		if req.Name == "" {
+			SendBadRequest(c, "Для группового чата должно быть указано имя")
+			return
+		}
+	}
+
+	// Проверяем существование всех указанных пользователей
+	allUserIDs := append(req.UserIDs, currentUserID) // Добавляем создателя чата
+	var users []models.User
+	if err := s.db.DB.Where("id IN ?", allUserIDs).Find(&users).Error; err != nil {
+		logger.Errorf("Ошибка проверки пользователей при создании чата: %v", err)
+		SendInternalError(c, "Ошибка при проверке пользователей")
+		return
+	}
+	if len(users) != len(allUserIDs) {
+		SendBadRequest(c, "Один или несколько указанных пользователей не найдены")
+		return
+	}
+
+	// Начинаем транзакцию
+	tx := s.db.DB.Begin()
+	if tx.Error != nil {
+		logger.Errorf("Ошибка начала транзакции: %v", tx.Error)
+		SendInternalError(c, "Ошибка сервера при создании чата")
+		return
+	}
+
+	// Создаем чат
+	newChat := models.Chat{
+		Name:         req.Name,
+		Type:         req.Type,
+		LastActivity: time.Now(), // Устанавливаем время последней активности
+	}
+	if err := tx.Create(&newChat).Error; err != nil {
+		tx.Rollback()
+		logger.Errorf("Ошибка создания чата в БД: %v", err)
+		SendInternalError(c, "Не удалось создать чат")
+		return
+	}
+
+	// Добавляем пользователей в чат (включая создателя)
+	chatUsers := make([]models.ChatUser, len(allUserIDs))
+	for i, uid := range allUserIDs {
+		chatUsers[i] = models.ChatUser{
+			ChatID:   newChat.ID,
+			UserID:   uid,
+			JoinedAt: time.Now(),
+			IsAdmin:  uid == currentUserID && req.Type == "group", // Создатель - админ в группе
+		}
+	}
+
+	if err := tx.Create(&chatUsers).Error; err != nil {
+		tx.Rollback()
+		logger.Errorf("Ошибка добавления пользователей в чат: %v", err)
+		SendInternalError(c, "Не удалось добавить пользователей в чат")
+		return
+	}
+
+	// Фиксируем транзакцию
+	if err := tx.Commit().Error; err != nil {
+		tx.Rollback()
+		logger.Errorf("Ошибка фиксации транзакции: %v", err)
+		SendInternalError(c, "Ошибка сервера при сохранении чата")
+		return
+	}
+
+	logger.Infof("Пользователь %d создал чат #%d (тип: %s)", currentUserID, newChat.ID, newChat.Type)
+
+	// Загружаем данные о пользователях для ответа
+	if err := s.db.DB.Preload("Users").First(&newChat, newChat.ID).Error; err != nil {
+		logger.Errorf("Ошибка загрузки пользователей для ответа: %v", err)
+		// Продолжаем, но ответ будет без списка пользователей
+	}
+
+	// Формируем ответ
+	chatResp := chatResponse{
+		ID:           newChat.ID,
+		Name:         newChat.Name,
+		Type:         newChat.Type,
+		CreatedAt:    newChat.CreatedAt,
+		LastActivity: newChat.LastActivity,
+		Users: make([]struct {
+			ID       uint   `json:"id"`
+			Username string `json:"username"`
+			Avatar   string `json:"avatar,omitempty"`
+		}, len(newChat.Users)),
+		LastMessage: nil,
+		UnreadCount: 0,
+	}
+
+	for i, user := range newChat.Users {
+		chatResp.Users[i] = struct {
+			ID       uint   `json:"id"`
+			Username string `json:"username"`
+			Avatar   string `json:"avatar,omitempty"`
+		}{
+			ID:       user.ID,
+			Username: user.Username,
+			Avatar:   user.Avatar,
+		}
+	}
+
+	c.JSON(http.StatusCreated, chatResp)
 }
 
 // handleGetChat возвращает информацию о конкретном чате

@@ -11,7 +11,6 @@ import (
 	"messenger/config"
 	"messenger/database"
 	"messenger/logger"
-	"messenger/middleware"
 )
 
 func main() {
@@ -57,9 +56,6 @@ func main() {
 		// Создаем отдельный роутер для WebSocket сервера
 		wsRouter := gin.New()
 		wsRouter.Use(gin.Recovery())
-
-		// Применяем JWT аутентификацию
-		wsRouter.Use(middleware.JWTAuth(cfg.JWT.Secret))
 
 		// Регистрируем WebSocket обработчик через адаптер
 		wsRouter.GET("/api/ws", func(c *gin.Context) {

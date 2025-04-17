@@ -159,7 +159,7 @@ func (s *Server) WebSocketHandler(c *gin.Context) {
 	// Если токен все еще не найден
 	if tokenString == "" {
 		logger.Warn("WebSocketHandler: Запрос без токена")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Требуется токен авторизации"})
+		c.Status(http.StatusUnauthorized) // Только статус без JSON для лучшей обработки ошибок WebSocket
 		return
 	}
 
@@ -168,7 +168,7 @@ func (s *Server) WebSocketHandler(c *gin.Context) {
 	claims, err := middleware.ValidateToken(tokenString, s.config.JWT.Secret)
 	if err != nil {
 		logger.Warnf("WebSocketHandler: Недействительный токен: %v", err)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Недействительный токен авторизации"})
+		c.Status(http.StatusUnauthorized) // Только статус без JSON для лучшей обработки ошибок WebSocket
 		return
 	}
 

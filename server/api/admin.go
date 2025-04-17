@@ -5,9 +5,12 @@ import (
 	"net/http"
 	"strconv"
 
+	// "context" // Раскомментируйте, если используется Redis
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"messenger/logger"
 	"messenger/models"
 )
 
@@ -38,30 +41,35 @@ type AdminCreateUpdateUserRequest struct {
 
 // AdminSettingsResponse представляет настройки системы
 type AdminSettingsResponse struct {
-	RegistrationEnabled bool   `json:"registration_enabled"`
-	MaintenanceMode     bool   `json:"maintenance_mode"`
-	AppName             string `json:"app_name"`
-	AppVersion          string `json:"app_version"`
+	RegistrationEnabled bool `json:"registration_enabled"`
+	MaintenanceMode     bool `json:"maintenance_mode"`
 }
 
 // AdminUpdateSettingsRequest представляет запрос на обновление настроек
 type AdminUpdateSettingsRequest struct {
-	RegistrationEnabled bool   `json:"registration_enabled"`
-	MaintenanceMode     bool   `json:"maintenance_mode"`
-	AppName             string `json:"app_name"`
+	RegistrationEnabled bool `json:"registration_enabled"`
+	MaintenanceMode     bool `json:"maintenance_mode"`
+}
+
+// AdminStatsResponse представляет статистику системы
+type AdminStatsResponse struct {
+	UserCount         int64 `json:"user_count"`
+	MessageCount      int64 `json:"message_count"`
+	ActiveConnections int   `json:"active_connections"`
+}
+
+// SystemStatusResponse представляет статус компонентов системы
+type SystemStatusResponse struct {
+	OverallStatus string `json:"overall_status"`
+	DBStatus      string `json:"db_status"`
+	RedisStatus   string `json:"redis_status"`
 }
 
 // handleAdminGetUsers обрабатывает запрос на получение списка всех пользователей
 func (s *Server) handleAdminGetUsers(c *gin.Context) {
-	// Проверяем, что пользователь имеет права администратора
-	user, exists := c.Get("user")
-	if !exists {
-		SendUnauthorized(c, "Пользователь не авторизован")
-		return
-	}
-
-	currentUser, ok := user.(*models.User)
-	if !ok || currentUser.Role != "admin" {
+	// Исправленная проверка прав администратора
+	role, exists := c.Get("role")
+	if !exists || role.(string) != "admin" {
 		SendForbidden(c, "Недостаточно прав")
 		return
 	}
@@ -89,24 +97,20 @@ func (s *Server) handleAdminGetUsers(c *gin.Context) {
 
 // handleAdminGetSettings обрабатывает запрос на получение настроек системы
 func (s *Server) handleAdminGetSettings(c *gin.Context) {
-	// Проверяем, что пользователь имеет права администратора
-	user, exists := c.Get("user")
-	if !exists {
-		SendUnauthorized(c, "Пользователь не авторизован")
-		return
-	}
-
-	currentUser, ok := user.(*models.User)
-	if !ok || currentUser.Role != "admin" {
+	// Исправленная проверка прав администратора
+	role, exists := c.Get("role")
+	if !exists || role.(string) != "admin" {
 		SendForbidden(c, "Недостаточно прав")
 		return
 	}
 
+	// Блокируем для чтения
+	s.configLock.RLock()
+	defer s.configLock.RUnlock()
+
 	settings := AdminSettingsResponse{
-		RegistrationEnabled: true,  // Используем временные значения
-		MaintenanceMode:     false, // для демонстрации
-		AppName:             "Мессенджер",
-		AppVersion:          "1.0.0",
+		RegistrationEnabled: s.config.Server.RegistrationEnabled,
+		MaintenanceMode:     s.config.Server.MaintenanceMode,
 	}
 
 	c.JSON(http.StatusOK, settings)
@@ -114,15 +118,9 @@ func (s *Server) handleAdminGetSettings(c *gin.Context) {
 
 // handleAdminUpdateSettings обрабатывает запрос на обновление настроек системы
 func (s *Server) handleAdminUpdateSettings(c *gin.Context) {
-	// Проверяем, что пользователь имеет права администратора
-	user, exists := c.Get("user")
-	if !exists {
-		SendUnauthorized(c, "Пользователь не авторизован")
-		return
-	}
-
-	currentUser, ok := user.(*models.User)
-	if !ok || currentUser.Role != "admin" {
+	// Исправленная проверка прав администратора
+	role, exists := c.Get("role")
+	if !exists || role.(string) != "admin" {
 		SendForbidden(c, "Недостаточно прав")
 		return
 	}
@@ -133,31 +131,30 @@ func (s *Server) handleAdminUpdateSettings(c *gin.Context) {
 		return
 	}
 
-	// В реальном приложении здесь будет код сохранения настроек
-	// Но для прототипа просто возвращаем полученные настройки
+	// Блокируем для записи
+	s.configLock.Lock()
+	s.config.Server.RegistrationEnabled = request.RegistrationEnabled
+	s.config.Server.MaintenanceMode = request.MaintenanceMode
+	s.configLock.Unlock() // Разблокируем сразу после записи
 
-	// Возвращаем обновленные настройки
+	logger.Infof("Администратор обновил настройки: RegistrationEnabled=%t, MaintenanceMode=%t", request.RegistrationEnabled, request.MaintenanceMode)
+
+	// Снова блокируем для чтения, чтобы вернуть актуальные данные
+	s.configLock.RLock()
 	settings := AdminSettingsResponse{
-		RegistrationEnabled: request.RegistrationEnabled,
-		MaintenanceMode:     request.MaintenanceMode,
-		AppName:             request.AppName,
-		AppVersion:          "1.0.0", // Версия приложения не изменяется через API
+		RegistrationEnabled: s.config.Server.RegistrationEnabled,
+		MaintenanceMode:     s.config.Server.MaintenanceMode,
 	}
+	s.configLock.RUnlock()
 
 	c.JSON(http.StatusOK, settings)
 }
 
 // handleAdminUpdateUser обрабатывает запрос на обновление пользователя
 func (s *Server) handleAdminUpdateUser(c *gin.Context) {
-	// Проверяем, что пользователь имеет права администратора
-	user, exists := c.Get("user")
-	if !exists {
-		SendUnauthorized(c, "Пользователь не авторизован")
-		return
-	}
-
-	currentUser, ok := user.(*models.User)
-	if !ok || currentUser.Role != "admin" {
+	// Исправленная проверка прав администратора
+	role, exists := c.Get("role")
+	if !exists || role.(string) != "admin" {
 		SendForbidden(c, "Недостаточно прав")
 		return
 	}
@@ -217,18 +214,16 @@ func (s *Server) handleAdminUpdateUser(c *gin.Context) {
 
 // handleAdminDeleteUser обрабатывает запрос на удаление пользователя
 func (s *Server) handleAdminDeleteUser(c *gin.Context) {
-	// Проверяем, что пользователь имеет права администратора
-	user, exists := c.Get("user")
-	if !exists {
-		SendUnauthorized(c, "Пользователь не авторизован")
-		return
-	}
-
-	currentUser, ok := user.(*models.User)
-	if !ok || currentUser.Role != "admin" {
+	// Исправленная проверка прав администратора
+	role, exists := c.Get("role")
+	if !exists || role.(string) != "admin" {
 		SendForbidden(c, "Недостаточно прав")
 		return
 	}
+
+	// Получаем ID текущего пользователя из контекста
+	currentUserIDVal, _ := c.Get("userID")
+	currentUserID := currentUserIDVal.(uint)
 
 	userID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -237,7 +232,7 @@ func (s *Server) handleAdminDeleteUser(c *gin.Context) {
 	}
 
 	// Нельзя удалить самого себя
-	if uint(userID) == currentUser.ID {
+	if uint(userID) == currentUserID {
 		SendBadRequest(c, "Нельзя удалить собственную учетную запись")
 		return
 	}
@@ -261,4 +256,70 @@ func (s *Server) handleAdminDeleteUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Пользователь успешно удален"})
+}
+
+// handleAdminStats обрабатывает запрос на получение статистики системы
+func (s *Server) handleAdminStats(c *gin.Context) {
+	// Исправленная проверка прав администратора
+	role, exists := c.Get("role")
+	if !exists || role.(string) != "admin" {
+		SendForbidden(c, "Недостаточно прав")
+		return
+	}
+
+	var userCount int64
+	s.db.DB.Model(&models.User{}).Count(&userCount)
+
+	var messageCount int64
+	// Уточните имя модели сообщения, если оно другое (например, models.ChatMessage)
+	s.db.DB.Model(&models.Message{}).Count(&messageCount)
+
+	// Подсчет активных WebSocket соединений (примерный)
+	activeConnections := 0
+	s.wsClients.Range(func(_, _ interface{}) bool {
+		activeConnections++
+		return true
+	})
+
+	stats := AdminStatsResponse{
+		UserCount:         userCount,
+		MessageCount:      messageCount,
+		ActiveConnections: activeConnections,
+	}
+
+	c.JSON(http.StatusOK, stats)
+}
+
+// handleSystemStatus обрабатывает запрос на получение статуса системы
+func (s *Server) handleSystemStatus(c *gin.Context) {
+	// Проверка прав администратора
+	role, exists := c.Get("role")
+	if !exists || role.(string) != "admin" {
+		SendForbidden(c, "Недостаточно прав")
+		return
+	}
+
+	dbStatus := "OK"
+	sqlDB, err := s.db.DB.DB()
+	if err != nil || sqlDB.Ping() != nil {
+		dbStatus = "Error"
+		logger.Errorf("Ошибка проверки статуса БД: %v", err) // Логируем ошибку
+	}
+
+	// Пример проверки Redis
+	redisStatus := "Not Used"
+	// if s.redisClient != nil { ... } // Логика проверки Redis
+
+	overallStatus := "OK"
+	if dbStatus != "OK" || redisStatus == "Error" { // Проверяем и Redis если он используется и вернул ошибку
+		overallStatus = "Degraded"
+	}
+
+	response := SystemStatusResponse{
+		OverallStatus: overallStatus,
+		DBStatus:      dbStatus,
+		RedisStatus:   redisStatus,
+	}
+
+	c.JSON(http.StatusOK, response)
 }

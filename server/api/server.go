@@ -42,6 +42,8 @@ type Server struct {
 	db     *database.Database
 	redis  *redis.RedisClient
 
+	configLock sync.RWMutex
+
 	// Управление клиентами WebSocket
 	clients map[uint]*Client
 	mu      sync.Mutex
@@ -210,6 +212,7 @@ func (s *Server) setupRoutes() {
 	{
 		// Авторизация
 		public.POST("/login", s.handleLogin)
+		public.POST("/register", s.handleRegister)
 
 		// Проверка работы сервера
 		public.GET("/health", func(c *gin.Context) {
@@ -230,9 +233,12 @@ func (s *Server) setupRoutes() {
 		// Проверка аутентификации
 		auth.GET("/auth/check", s.handleAuthCheck)
 
-		// Пользователи (только админ)
-		auth.GET("/users", s.handleGetUsers)
-		auth.POST("/users", s.handleCreateUser)
+		// Пользователи (доступ только админу - проверка внутри обработчиков)
+		auth.GET("/users", s.handleGetUsers)    // Может быть админским
+		auth.POST("/users", s.handleCreateUser) // Может быть админским
+		// TODO: Добавить PUT /users/:id и DELETE /users/:id, если нужно для админки
+		auth.PUT("/users/:id", s.handleAdminUpdateUser)    // Добавлен обработчик обновления
+		auth.DELETE("/users/:id", s.handleAdminDeleteUser) // Добавлен обработчик удаления
 
 		// Список пользователей для чата (доступно всем авторизованным)
 		auth.GET("/chat/users", s.handleGetChatUsers)
@@ -248,28 +254,26 @@ func (s *Server) setupRoutes() {
 
 		// API для сообщений в чатах
 		auth.GET("/chat/:chatID/messages", s.handleGetMessages)
-		auth.POST("/chat/:chatID/messages", s.handleSendMessage)
-		auth.POST("/chat/:chatID/read", s.handleMarkMessagesAsRead)
 
-		// Сообщения (используются в старой версии API, будут удалены)
-		auth.GET("/messages/:user_id", s.handleGetMessages)
-		auth.POST("/messages", s.handleSendMessage)
-
-		// Отметить сообщения как прочитанные (используется в старой версии API, будет удалено)
-		auth.POST("/messages/read", s.handleMarkMessagesAsRead)
-
-		// Файлы
+		// API для файлов
 		auth.POST("/files/upload", s.handleFileUpload)
 
-		// WebSocket для чата и звонков
-		// auth.GET("/ws", s.handleWebSocket) - перемещено в публичную группу
+		// --- Админские маршруты ---
+		// Группируем админские маршруты для наглядности (хотя middleware уже применен)
+		admin := auth.Group("/admin") // Можно было бы и без группы, но так понятнее
+		{
+			admin.GET("/users", s.handleAdminGetUsers)          // Список всех пользователей
+			admin.GET("/settings", s.handleAdminGetSettings)    // Настройки системы
+			admin.PUT("/settings", s.handleAdminUpdateSettings) // Обновление настроек
+			// Новые маршруты
+			admin.GET("/stats", s.handleAdminStats)
+		}
+		// Маршрут статуса системы (может быть не только для админа, но защищен JWT)
+		auth.GET("/system/status", s.handleSystemStatus)
 
-		// Администраторские маршруты
-		auth.GET("/admin/users", s.handleAdminGetUsers)
-		auth.GET("/admin/settings", s.handleAdminGetSettings)
-		auth.PUT("/admin/settings", s.handleAdminUpdateSettings)
-		auth.PUT("/admin/users/:id", s.handleAdminUpdateUser)
-		auth.DELETE("/admin/users/:id", s.handleAdminDeleteUser)
+		// Сброс системы (очень осторожно!)
+		auth.POST("/system/reset", s.handleResetSystem)
+
 	}
 
 	// Логирование всех доступных маршрутов
@@ -516,7 +520,7 @@ func (s *Server) handleWebSocket(c *gin.Context) {
 
 	if tokenString == "" {
 		logger.Warnf("WebSocket: Токен не найден ни в URL, ни в заголовке, ни в куках")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Требуется токен авторизации"})
+		c.Status(http.StatusUnauthorized) // Только статус без JSON для лучшей обработки ошибок WebSocket
 		return
 	}
 
@@ -524,7 +528,7 @@ func (s *Server) handleWebSocket(c *gin.Context) {
 	claims, err := middleware.ValidateToken(tokenString, s.config.JWT.Secret)
 	if err != nil {
 		logger.Warnf("WebSocket: Недействительный токен: %v", err)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Недействительный токен авторизации"})
+		c.Status(http.StatusUnauthorized) // Только статус без JSON для лучшей обработки ошибок WebSocket
 		return
 	}
 

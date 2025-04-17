@@ -79,6 +79,14 @@ func (r *RedisClient) IsEnabled() bool {
 	return r.enabled
 }
 
+// НОВЫЙ МЕТОД: Ping проверяет соединение с Redis
+func (r *RedisClient) Ping(ctx context.Context) error {
+	if !r.enabled || r.client == nil {
+		return fmt.Errorf("Redis client is not enabled or initialized")
+	}
+	return r.client.Ping(ctx).Err()
+}
+
 // Закрытие соединения с Redis
 func (r *RedisClient) Close() error {
 	if !r.enabled {

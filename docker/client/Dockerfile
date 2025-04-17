@@ -33,9 +33,6 @@ FROM nginx:alpine
 # Копируем собранные файлы из предыдущего этапа
 COPY --from=build /app/build/ /usr/share/nginx/html/
 
-# Копируем websocket-test.html для диагностики WebSocket
-COPY websocket-test.html /usr/share/nginx/html/
-
 # Копируем конфигурацию nginx
 COPY docker/client/nginx.conf /etc/nginx/conf.d/default.conf
 
