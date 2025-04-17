@@ -470,23 +470,6 @@ func (s *Server) handleResetSystem(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Система сброшена успешно"})
 }
 
-// handleSystemStatus отправляет статус инициализации системы
-func (s *Server) handleSystemStatus(c *gin.Context) {
-	initialized, err := s.db.IsInitialized()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Ошибка проверки инициализации: " + err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"initialized": initialized,
-		"status":      "ok",
-		"version":     "1.0.0",
-	})
-}
-
 // handleWebSocket обрабатывает WebSocket соединения
 func (s *Server) handleWebSocket(c *gin.Context) {
 	// Записываем детальное логирование всех возможных мест, где может быть токен
