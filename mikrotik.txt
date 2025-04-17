@@ -1,0 +1,66 @@
+
+[kikita@KikitaGW] > /ip firewall nat print detail
+Flags: X - disabled, I - invalid; D - dynamic 
+ 0    chain=srcnat action=src-nat to-addresses=10.15.81.6 out-interface=LV_GRE log=no log-prefix="" 
+
+ 1    ;;; Traffic to WAN 
+      chain=srcnat action=src-nat to-addresses=95.30.251.97 out-interface=ether1 log=no log-prefix="" 
+
+ 2    ;;; DNS Redirect
+      chain=dstnat action=redirect protocol=udp in-interface-list=!WAN dst-port=53 log=no log-prefix="" 
+
+ 3    chain=dstnat action=dst-nat to-addresses=10.16.52.1 to-ports=80 protocol=tcp src-address=82.202.136.185 dst-port=55080 log=no log-prefix="" 
+
+ 4    chain=dstnat action=dst-nat to-addresses=10.16.52.1 to-ports=180 protocol=tcp src-address=82.202.136.185 dst-port=55180 log=no log-prefix="" 
+
+ 5    chain=dstnat action=dst-nat to-addresses=10.16.52.11 to-ports=8065 protocol=tcp src-address=82.202.136.185 dst-port=55280 log=no log-prefix="" 
+
+ 6    chain=dstnat action=dst-nat to-addresses=10.16.52.1 to-ports=8081 protocol=tcp src-address=82.202.136.185 dst-port=55581 
+
+ 7    chain=dstnat action=dst-nat to-addresses=10.16.52.1 to-ports=9095 protocol=tcp src-address=82.202.136.185 dst-port=55580 
+
+ 8    chain=dstnat action=dst-nat to-addresses=10.16.52.1 to-ports=9091 protocol=tcp src-address=82.202.136.185 dst-port=55583 
+
+ 9    chain=dstnat action=dst-nat to-addresses=10.16.52.1 to-ports=7880 protocol=tcp src-address=82.202.136.185 dst-port=7880 
+
+10    chain=dstnat action=dst-nat to-addresses=10.16.52.1 to-ports=7881 protocol=tcp src-address=82.202.136.185 dst-port=7881 
+
+11    chain=dstnat action=dst-nat to-addresses=10.16.52.1 to-ports=7881 protocol=udp src-address=82.202.136.185 dst-port=7881 
+
+12    chain=dstnat action=dst-nat to-addresses=10.16.52.1 protocol=tcp in-interface=ether1 dst-port=443,80 log=no log-prefix="" 
+[kikita@KikitaGW] > /ip firewall connection tracking settings print
+bad command name settings (line 1 column 34)
+[kikita@KikitaGW] > ip firewall connection print where dst-address=10.16.52.15 and dst-port=9091
+expected value of port (line 1 column 59)
+[kikita@KikitaGW] > /system resource print
+                   uptime: 21h4m24s
+                  version: 7.16.1 (stable)
+               build-time: 2024-10-10 14:03:32
+         factory-software: 6.46.3
+              free-memory: 189.6MiB
+             total-memory: 256.0MiB
+                      cpu: MIPS 1004Kc V2.15
+                cpu-count: 4
+            cpu-frequency: 880MHz
+                 cpu-load: 4%
+           free-hdd-space: 4260.0KiB
+          total-hdd-space: 16.0MiB
+  write-sect-since-reboot: 6445
+         write-sect-total: 11345
+        architecture-name: mmips
+               board-name: hEX
+                 platform: MikroTik
+[kikita@KikitaGW] > /interface print stats
+Flags: R - RUNNING; S - SLAVE
+Columns: NAME, RX-BYTE, TX-BYTE, RX-PACKET, TX-PACKET, RX-DROP, TX-DROP, TX-QUEUE-DROP, RX-ERROR, TX-ERROR
+#    NAME                        RX-BYTE         TX-BYTE   RX-PACKET   TX-PACKET  RX-DROP  TX-DROP  TX-QUEUE-DROP  RX-ERROR  TX-ERROR
+0 R  ether1               31 309 574 200   1 988 033 889  24 429 212   8 895 587                                6                    
+1 RS ether2                  355 492 330   1 472 196 485   1 486 134   2 252 852                            2 643                    
+2 RS ether3                1 563 233 537  25 482 603 034   7 245 594  19 581 896                           86 432                    
+3 R  ether4_dmz              178 396 944   3 864 967 565     565 767   2 767 027                            5 583                    
+4  S ether5                            0               0           0           0                                0                    
+5 R  LV_GRE                3 658 370 109     107 324 320   2 960 945     404 956        0        0              0         0         0
+6 R  bridge_LAN            1 847 336 666  26 714 931 180   8 822 244  21 479 289        0        0              0         0         0
+7    l2tp-kikita-android               0               0           0           0        0        0              0         0         0
+8 R  lo                          380 628         380 628       2 616       2 616        0        0              0         0         0
+[kikita@KikitaGW] >

@@ -27,15 +27,24 @@ export const AuthProvider = ({ children }) => {
   const getToken = useCallback(() => {
     console.log('AuthContext: Попытка получения токена из localStorage');
     
-    // Пробуем разные ключи для совместимости с разными версиями
-    const authToken = localStorage.getItem('auth_token');
+    // Используем единственный ключ для токена 
     const token = localStorage.getItem('token');
     
-    console.log('AuthContext: auth_token в localStorage:', authToken ? 'присутствует' : 'отсутствует');
     console.log('AuthContext: token в localStorage:', token ? 'присутствует' : 'отсутствует');
     
-    // Возвращаем токен, если он есть
-    return authToken || token || null;
+    // Для обратной совместимости также проверяем старый ключ (временно)
+    if (!token) {
+      const authToken = localStorage.getItem('auth_token');
+      if (authToken) {
+        // Если нашли токен по старому ключу, переносим его в новый формат
+        localStorage.setItem('token', authToken);
+        localStorage.removeItem('auth_token');
+        console.log('AuthContext: Токен перенесен из старого формата в новый');
+        return authToken;
+      }
+    }
+    
+    return token || null;
   }, []);
   
   // Сохранение данных аутентификации

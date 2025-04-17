@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   List,
   ListItem,
@@ -33,6 +33,7 @@ import authApi from '../../api/auth';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useWebSocket } from '../../contexts/WebSocketContext';
+import { useMessages } from '../../contexts/MessageContext';
 
 // Стилизованный поиск
 const Search = styled('div')(({ theme }) => ({
@@ -85,6 +86,13 @@ const formatTime = (timestamp) => {
 const ChatList = ({ onSelectChat }) => {
   const { conversations, activeConversation, setActiveConversation } = useChat();
   const { token, currentUser } = useAuth();
+  const { 
+    chats: messageChats, 
+    activeChat, 
+    setActiveConversation: setActiveMessageConversation, 
+    loadChats, 
+    createChat 
+  } = useMessages();
   const [search, setSearch] = useState('');
   const [newChatDialogOpen, setNewChatDialogOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
@@ -128,50 +136,67 @@ const ChatList = ({ onSelectChat }) => {
   }, [token, currentUser]);
 
   // Фильтрация чатов по поиску
-  const filteredConversations = conversations.filter(conversation =>
+  const filteredConversations = messageChats.filter(conversation =>
     conversation.name.toLowerCase().includes(search.toLowerCase())
   );
 
   // Обработчик выбора чата
   const handleSelectChat = (conversation) => {
-    setActiveConversation(conversation);
+    setActiveMessageConversation(conversation.id);
     if (onSelectChat) onSelectChat();
   };
 
-  // Обработчик создания нового чата
-  const handleCreateNewChat = () => {
+  // Обработчик создания нового чата из диалога
+  const handleCreateNewChat = async () => {
     if (!selectedUserId) {
       setError('Выберите пользователя для чата');
       return;
     }
-    
-    // Находим пользователя из списка
-    const selectedUser = users.find(user => user.id.toString() === selectedUserId);
-    if (!selectedUser) {
-      setError('Выбранный пользователь не найден');
+    setError('');
+
+    const userIdNumber = parseInt(selectedUserId);
+    if (isNaN(userIdNumber)) {
+        setError('Некорректный ID пользователя');
+        return;
+    }
+
+    // Проверяем существующий чат в messageChats
+    const existingConversation = messageChats.find(c => 
+        c.type === 'direct' && 
+        c.users?.some(u => u.id === userIdNumber) &&
+        c.users?.some(u => u.id === currentUser.id)
+    );
+
+    if (existingConversation) {
+      console.log('ChatList: Чат с этим пользователем уже существует, делаем активным');
+      setActiveMessageConversation(existingConversation.id);
+      setNewChatDialogOpen(false);
+      setSelectedUserId('');
+      if (onSelectChat) onSelectChat();
       return;
     }
-    
-    // Проверяем, существует ли уже такой чат
-    const existingConversation = conversations.find(c => c.id === selectedUserId);
-    
-    if (existingConversation) {
-      setActiveConversation(existingConversation);
-    } else {
-      // Создаем новый чат
-      const newConversation = {
-        id: selectedUserId,
-        name: selectedUser.username,
-        lastMessage: '',
-        lastMessageTime: null
-      };
+
+    console.log(`ChatList: Попытка создать личный чат с пользователем ID: ${userIdNumber}`);
+    try {
+      // Добавляем лог перед вызовом
+      console.log(`ChatList: Вызываем createChat из MessageContext с параметрами:`, { type: 'direct', user_ids: [userIdNumber] });
       
-      setActiveConversation(newConversation);
+      // Вызываем createChat из useMessages
+      const newChat = await createChat({ type: 'direct', user_ids: [userIdNumber] });
+      if (newChat) {
+        console.log('ChatList: Чат успешно создан через контекст', newChat);
+        setNewChatDialogOpen(false);
+        setSelectedUserId('');
+        if (onSelectChat) onSelectChat();
+      } else {
+        // Ошибка отобразится через toast из контекста
+        setError('Не удалось создать чат. Попробуйте снова.'); 
+      }
+    } catch (err) {
+       // Ошибка уже обработана в контексте
+       console.error("ChatList: Ошибка при вызове createChat", err);
+       setError('Ошибка при создании чата.');
     }
-    
-    setNewChatDialogOpen(false);
-    setSelectedUserId('');
-    if (onSelectChat) onSelectChat();
   };
 
   return (
@@ -219,7 +244,7 @@ const ChatList = ({ onSelectChat }) => {
             <ListItem
               button
               key={conversation.id}
-              selected={activeConversation && activeConversation.id === conversation.id}
+              selected={activeChat && activeChat.id === conversation.id}
               onClick={() => handleSelectChat(conversation)}
               sx={{
                 borderBottom: '1px solid rgba(0, 0, 0, 0.06)',

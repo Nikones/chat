@@ -22,6 +22,9 @@ class WebSocketService {
 
   // Установка соединения
   connect() {
+    // Получаем токен из localStorage
+    this.token = localStorage.getItem('token');
+    
     if (!this.token) {
       console.error('WebSocketService: Попытка подключения без токена');
       return;

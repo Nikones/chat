@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { useAuth } from './AuthContext';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import API from '../utils/api';
 
 // Создаем контекст с дефолтными значениями чтобы избежать null
 const AdminContext = createContext({
@@ -38,33 +39,60 @@ export const AdminProvider = ({ children }) => {
     callTimeout: 60,
     maxGroupSize: 20
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState({ users: true, settings: true });
   const [error, setError] = useState(null);
+  const [apiError, setApiError] = useState({ users: null, settings: null });
 
   // Функция для загрузки настроек системы
   const fetchSettings = useCallback(async () => {
     if (!isAuthenticated) return;
     
+    const defaultSettings = {
+      registrationEnabled: false,
+      maxUploadSize: 10,
+      messageRetentionDays: 30,
+      callTimeout: 60,
+      maxGroupSize: 20,
+      // Добавляем поля, которые приходят от API, если они нужны в UI
+      maintenance_mode: false, 
+      app_name: 'Мессенджер',
+      app_version: '0.0.0'
+    };
+
     try {
       console.log('Admin: Загрузка настроек системы');
-      const response = await axios.get('/api/admin/settings', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      setLoading(prev => ({ ...prev, settings: true })); 
+      setApiError(prev => ({ ...prev, settings: null }));
+
+      const response = await API.get('/admin/settings');
+      console.log('[AdminContext] Raw settings response data:', response.data);
       
-      if (response.data && response.data.settings) {
-        setSettings(response.data.settings);
-        console.log('Admin: Настройки системы загружены успешно');
+      if (response.data && typeof response.data === 'object') {
+        // Объединяем дефолтные настройки с полученными данными
+        const mergedSettings = { 
+            ...defaultSettings, 
+            ...response.data, 
+            // Явно преобразуем registration_enabled в registrationEnabled, если имена отличаются
+            registrationEnabled: response.data.registration_enabled 
+        };
+        setSettings(mergedSettings);
+        return mergedSettings;
       } else {
         console.warn('Admin: Сервер вернул некорректные данные настроек, используем дефолтные значения');
+        setSettings(defaultSettings);
+        setApiError(prev => ({ ...prev, settings: 'Некорректный формат данных настроек от сервера' }));
+        return defaultSettings;
       }
-    } catch (err) {
-      console.error('Admin: Ошибка при загрузке настроек системы', err);
-      toast.error('Не удалось загрузить настройки системы');
-      // В случае ошибки оставляем дефолтные настройки
+    } catch (error) {
+      console.error('Admin: Ошибка загрузки настроек:', error);
+      setApiError(prev => ({ ...prev, settings: 'Ошибка загрузки настроек. ' + (error.response?.data?.message || error.message) }));
+      setSettings(defaultSettings); // Устанавливаем дефолт при ошибке
+      toast.error('Ошибка загрузки настроек администратора');
+      return defaultSettings;
+    } finally {
+      setLoading(prev => ({ ...prev, settings: false }));
     }
-  }, [token, isAuthenticated]);
+  }, [isAuthenticated, API]);
 
   // Функция для обновления настроек
   const updateSettings = useCallback(async (newSettings) => {
@@ -133,35 +161,36 @@ export const AdminProvider = ({ children }) => {
       return;
     }
     
-    setLoading(true);
-    setError(null);
+    // Устанавливаем loading для пользователей
+    setLoading(prev => ({ ...prev, users: true }));
+    // Сбрасываем ошибку пользователей
+    setApiError(prev => ({ ...prev, users: null }));
     
     try {
       console.log('Admin: Загрузка списка пользователей');
-      const response = await axios.get('/api/admin/users', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      // Используем API для консистентности
+      const response = await API.get('/admin/users');
       
+      // Проверяем ответ сервера
       if (response.data && Array.isArray(response.data.users)) {
         setUsers(response.data.users);
         console.log(`Admin: Загружено ${response.data.users.length} пользователей`);
       } else {
-        // В случае если сервер не вернул массив, создаем пустой массив
         setUsers([]);
         console.warn('Admin: Сервер вернул некорректные данные пользователей', response.data);
+        setApiError(prev => ({ ...prev, users: 'Некорректные данные пользователей' }));
       }
     } catch (err) {
       console.error('Admin: Ошибка при загрузке пользователей', err);
-      setError(err.message || 'Ошибка при загрузке списка пользователей');
-      // В случае ошибки устанавливаем пустой массив вместо null
+      // Устанавливаем ошибку для пользователей
+      setApiError(prev => ({ ...prev, users: err.message || 'Ошибка при загрузке списка пользователей' }));
       setUsers([]);
       toast.error('Не удалось загрузить список пользователей');
     } finally {
-      setLoading(false);
+      // Сбрасываем loading для пользователей
+      setLoading(prev => ({ ...prev, users: false }));
     }
-  }, [token, isAuthenticated]);
+  }, [isAuthenticated, API]); // Убираем token, используем API
 
   // Функция для создания нового пользователя
   const createUser = useCallback(async (userData) => {
@@ -196,32 +225,32 @@ export const AdminProvider = ({ children }) => {
   const updateUser = useCallback(async (userId, userData) => {
     if (!isAuthenticated) return false;
     
-    setLoading(true);
+    setLoading(prev => ({...prev, users: true})); // Используем объектный loading
+    setApiError(prev => ({ ...prev, users: null }));
     try {
-      const response = await axios.put(`/api/admin/users/${userId}`, userData, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      // Исправляем URL: убираем /admin
+      const response = await API.put(`/users/${userId}`, userData); 
       
-      // Обновляем пользователя в состоянии
       if (response.data && response.data.user) {
         setUsers(prev => 
           prev.map(user => user.id === userId ? response.data.user : user)
         );
         toast.success('Данные пользователя обновлены');
         return true;
+      } else {
+         console.warn("Update user response did not contain user data:", response.data);
+         setApiError(prev => ({ ...prev, users: 'Некорректный ответ сервера при обновлении пользователя' }));
+         return false;
       }
-      return false;
     } catch (err) {
       console.error('Admin: Ошибка при обновлении пользователя', err);
-      setError(err.message || 'Ошибка при обновлении пользователя');
+      setApiError(prev => ({ ...prev, users: err.response?.data?.message || err.message || 'Ошибка при обновлении пользователя' })); 
       toast.error('Не удалось обновить данные пользователя');
       return false;
     } finally {
-      setLoading(false);
+      setLoading(prev => ({...prev, users: false})); // Используем объектный loading
     }
-  }, [token, isAuthenticated]);
+  }, [isAuthenticated, API, setApiError]); // Добавляем API
 
   // Функция для удаления пользователя
   const deleteUser = useCallback(async (userId) => {
@@ -284,12 +313,15 @@ export const AdminProvider = ({ children }) => {
   useEffect(() => {
     if (isAuthenticated) {
       console.log('AdminContext: Инициализация и загрузка данных');
+      // Устанавливаем начальное состояние загрузки при аутентификации
+      setLoading({ users: true, settings: true });
       loadUsers();
       fetchSettings();
     } else {
       console.log('AdminContext: Ожидание аутентификации');
-      // Устанавливаем пустой массив вместо null
       setUsers([]);
+      // Сбрасываем loading, если не аутентифицирован
+      setLoading({ users: false, settings: false });
     }
   }, [isAuthenticated, loadUsers, fetchSettings]);
 
@@ -298,7 +330,7 @@ export const AdminProvider = ({ children }) => {
     users,
     settings,
     loading,
-    error,
+    apiError,
     loadUsers,
     createUser,
     updateUser,
@@ -307,6 +339,7 @@ export const AdminProvider = ({ children }) => {
     toggleRegistration,
     updateSettings,
     getStats,
+    fetchSettings,
   };
 
   return (

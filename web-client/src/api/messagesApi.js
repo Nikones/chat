@@ -105,8 +105,18 @@ export const markAsRead = (chatId) => {
  * @param {Object} data - Данные для создания чата
  * @returns {Promise} - Промис с ответом API
  */
-export const createChat = (data) => {
-  return api.post('/api/chat', data);
+export const createChat = async (chatData) => {
+  try {
+    // Ожидаем, что chatData содержит { type: 'direct' | 'group', name?: string, user_ids?: number[] }
+    console.log('[messagesApi] Создание чата с данными:', chatData);
+    const response = await api.post('/chat', chatData); 
+    console.log('[messagesApi] Ответ на создание чата:', response.data);
+    return response.data; // Ожидаем, что сервер вернет созданный чат
+  } catch (error) {
+    console.error('[messagesApi] Ошибка создания чата:', error);
+    // Пробрасываем ошибку, чтобы ее можно было обработать в контексте
+    throw error; 
+  }
 };
 
 /**
@@ -155,6 +165,18 @@ export const removeUserFromChat = (chatId, userId) => {
  */
 export const updateChat = (chatId, data) => {
   return api.put(`/api/chat/${chatId}`, data);
+};
+
+// Получение списка пользователей для добавления в чат (если необходимо)
+export const getUsersForChat = async () => {
+  try {
+    // Эндпоинт может отличаться, `/users` или `/chat/users` или другой
+    const response = await api.get('/users'); 
+    return response.data; 
+  } catch (error) {
+    console.error('[messagesApi] Ошибка получения пользователей:', error);
+    throw error;
+  }
 };
 
 export default api; 

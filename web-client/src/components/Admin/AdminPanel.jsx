@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Container, Row, Col, Card, Tab, Nav, Table, Button, Form, Alert, Badge, Modal, Spinner } from 'react-bootstrap';
 import { useAdmin } from '../../contexts/AdminContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,25 +23,26 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import API from '../../utils/api';
 import './AdminPanel.css';
+import { Navigate } from 'react-router-dom';
 
 const AdminPanel = () => {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { 
     users, 
     settings, 
-    loading, 
-    error, 
-    loadUsers, 
+    loading: adminContextLoading, 
+    apiError: adminContextApiError,
+    loadUsers,
     updateSettings, 
     toggleRegistration, 
     createUser, 
     updateUser, 
     toggleUserBlock, 
     deleteUser,
-    getStats
+    getStats,
+    fetchSettings,
   } = useAdmin();
   
-  const [stats, setStats] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -55,42 +56,83 @@ const AdminPanel = () => {
     role: 'user'
   });
   const [formError, setFormError] = useState('');
-  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [systemStatus, setSystemStatus] = useState(null);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [validated, setValidated] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [statusError, setStatusError] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [localSettings, setLocalSettings] = useState(null);
 
-  // Загрузка статистики при монтировании
+  const fetchSystemStatus = useCallback(async () => {
+    try {
+      setStatusError(null);
+      const response = await API.get('/system/status');
+      setSystemStatus(response.data);
+    } catch (err) {
+      console.error('Ошибка при загрузке статуса системы:', err);
+      setStatusError('Не удалось загрузить статус системы.');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated && user?.role === 'admin') {
+      console.log('AdminPanel useEffect: Загрузка основных данных (пользователи, статус)');
+      loadUsers();
+      getStats();
+      fetchSystemStatus();
+    }
+  }, [isAuthenticated, user, loadUsers, getStats, fetchSystemStatus]);
+
+  useEffect(() => {
+    const loadAdminSettings = async () => {
+      if (isAuthenticated && user?.role === 'admin') {
+        console.log('AdminPanel useEffect: Загрузка настроек');
+        try {
+          const loadedSettings = await fetchSettings();
+          if (loadedSettings) {
+            setLocalSettings(loadedSettings);
+            console.log("AdminPanel: Настройки загружены и установлены в локальное состояние:", loadedSettings);
+          } else {
+            setLocalSettings({});
+            console.warn("AdminPanel: Настройки не были загружены из fetchSettings.");
+          }
+        } catch (error) {
+          console.error('AdminPanel: Ошибка при загрузке настроек:', error);
+          setLocalSettings({});
+        }
+      }
+    };
+    loadAdminSettings();
+  }, [isAuthenticated, user, fetchSettings]);
+
   useEffect(() => {
     const loadStats = async () => {
-      setDashboardLoading(true);
-      const statsData = await getStats();
-      if (statsData) {
-        setStats(statsData);
+      if (isAuthenticated && user?.role === 'admin') {
+        console.log('AdminPanel useEffect: Загрузка статистики');
+        setStatsLoading(true);
+        try {
+          const statsData = await getStats();
+          if (statsData) {
+            setStats(statsData);
+          } else {
+            setStats(null);
+            console.warn('Не удалось получить данные статистики');
+          }
+        } catch (error) {
+          console.error('Ошибка при загрузке статистики:', error);
+          setStats(null);
+        } finally {
+          setStatsLoading(false);
+        }
       }
-      setDashboardLoading(false);
     };
     
     loadStats();
-  }, [getStats]);
+  }, [isAuthenticated, user, getStats]);
   
-  // Загрузка статуса системы при монтировании
-  useEffect(() => {
-    const fetchSystemStatus = async () => {
-      try {
-        const statusResponse = await API.get('/system/status');
-        setSystemStatus(statusResponse.data);
-      } catch (error) {
-        console.error('Ошибка при загрузке статуса системы:', error);
-        setApiError('Не удалось загрузить статус системы. Пожалуйста, попробуйте позже.');
-      }
-    };
-    
-    fetchSystemStatus();
-  }, []);
-  
-  // Обработчик изменения настройки регистрации
   const handleToggleRegistration = async () => {
     if (settings) {
       await toggleRegistration(!settings.registrationEnabled);
@@ -100,23 +142,19 @@ const AdminPanel = () => {
     }
   };
   
-  // Обработчик изменения формы пользователя
   const handleUserFormChange = (e) => {
     const { name, value } = e.target;
     setUserForm(prev => ({ ...prev, [name]: value }));
   };
   
-  // Обработчик отправки формы создания пользователя
   const handleCreateUserSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
     
-    // Проверка паролей
     if (userForm.password !== userForm.confirm_password) {
       return setFormError('Пароли не совпадают');
     }
     
-    // Проверка email
     if (!userForm.email.includes('@')) {
       return setFormError('Пожалуйста, введите корректный email');
     }
@@ -132,7 +170,6 @@ const AdminPanel = () => {
     const result = await createUser(userData);
     
     if (result) {
-      // Очистка формы и закрытие модального окна
       setUserForm({
         username: '',
         email: '',
@@ -145,12 +182,10 @@ const AdminPanel = () => {
     }
   };
   
-  // Обработчик отправки формы редактирования пользователя
   const handleEditUserSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
     
-    // Проверка email
     if (!userForm.email.includes('@')) {
       return setFormError('Пожалуйста, введите корректный email');
     }
@@ -161,7 +196,6 @@ const AdminPanel = () => {
       role: userForm.role
     };
     
-    // Добавляем пароль, только если он был введен
     if (userForm.password) {
       if (userForm.password !== userForm.confirm_password) {
         return setFormError('Пароли не совпадают');
@@ -172,7 +206,6 @@ const AdminPanel = () => {
     const result = await updateUser(selectedUser.id, userData);
     
     if (result) {
-      // Очистка формы и закрытие модального окна
       setUserForm({
         username: '',
         email: '',
@@ -186,7 +219,6 @@ const AdminPanel = () => {
     }
   };
   
-  // Обработчик удаления пользователя
   const handleDeleteUserConfirm = async () => {
     if (selectedUser) {
       await deleteUser(selectedUser.id);
@@ -195,12 +227,10 @@ const AdminPanel = () => {
     }
   };
   
-  // Обработчик блокировки/разблокировки пользователя
   const handleToggleBlock = async (userId, currentState) => {
     await toggleUserBlock(userId, !currentState);
   };
   
-  // Открытие модального окна редактирования пользователя
   const openEditModal = (user) => {
     setSelectedUser(user);
     setUserForm({
@@ -214,7 +244,6 @@ const AdminPanel = () => {
     setShowEditModal(true);
   };
   
-  // Открытие модального окна удаления пользователя
   const openDeleteModal = (user) => {
     setSelectedUser(user);
     setShowDeleteModal(true);
@@ -264,7 +293,40 @@ const AdminPanel = () => {
     setApiError('');
   };
 
-  // Если пользователь не является администратором, показываем сообщение об ошибке
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+  };
+
+  const handleSettingsChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setLocalSettings(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : type === 'number' ? parseInt(value, 10) || 0 : value
+    }));
+  };
+
+  const handleSettingsSubmit = async (e) => {
+    e.preventDefault();
+    if (localSettings) {
+      console.log("AdminPanel: Попытка сохранить настройки:", localSettings);
+      await updateSettings(localSettings);
+      alert('Настройки успешно сохранены!');
+    } else {
+       console.error('AdminPanel: Ошибка сохранения - localSettings пуст.');
+       setApiError('Не удалось сохранить настройки. Данные не готовы.');
+    }
+  };
+
+  if (!isAuthenticated) {
+    return (
+        <Container className="mt-4 d-flex justify-content-center">
+            <Spinner animation="border" role="status">
+                <span className="visually-hidden">Загрузка...</span>
+            </Spinner>
+        </Container>
+    );
+  }
+  
   if (user?.role !== 'admin') {
     return (
       <Container className="mt-4">
@@ -276,6 +338,11 @@ const AdminPanel = () => {
     );
   }
 
+  const isUsersLoading = adminContextLoading.users;
+  const isSettingsLoading = adminContextLoading.settings;
+  const usersError = adminContextApiError.users;
+  const settingsError = adminContextApiError.settings;
+
   return (
     <Container fluid className="py-4">
       <Card>
@@ -283,10 +350,11 @@ const AdminPanel = () => {
           <h4 className="mb-0">Администрирование</h4>
         </Card.Header>
         <Card.Body>
-          {error && <Alert variant="danger">{error}</Alert>}
           {apiError && <Alert variant="danger">{apiError}</Alert>}
+          {usersError && <Alert variant="danger">Ошибка загрузки пользователей: {usersError}</Alert>}
+          {settingsError && <Alert variant="danger">Ошибка загрузки настроек: {settingsError}</Alert>}
           
-          <Tab.Container id="admin-tabs" defaultActiveKey="dashboard">
+          <Tab.Container id="admin-tabs" defaultActiveKey="dashboard" activeKey={activeTab} onSelect={(k) => setActiveTab(k)}>
             <Row>
               <Col sm={3}>
                 <Nav variant="pills" className="flex-column mb-3">
@@ -303,11 +371,10 @@ const AdminPanel = () => {
               </Col>
               <Col sm={9}>
                 <Tab.Content>
-                  {/* Вкладка обзора */}
                   <Tab.Pane eventKey="dashboard">
                     <h5 className="mb-4">Статистика системы</h5>
                     
-                    {dashboardLoading ? (
+                    {statsLoading ? (
                       <div className="text-center py-5">
                         <Spinner animation="border" variant="primary" />
                         <p className="mt-2">Загрузка статистики...</p>
@@ -317,7 +384,7 @@ const AdminPanel = () => {
                         <Col md={4} className="mb-3">
                           <Card className="text-center h-100">
                             <Card.Body>
-                              <h2 className="display-4">{stats.userCount}</h2>
+                              <h2 className="display-4">{stats.userCount ?? 'N/A'}</h2>
                               <Card.Title>Пользователей</Card.Title>
                             </Card.Body>
                           </Card>
@@ -390,11 +457,10 @@ const AdminPanel = () => {
                         )}
                       </Row>
                     ) : (
-                      <Alert variant="info">Нет доступной статистики</Alert>
+                      <Alert variant="info">Нет доступной статистики или произошла ошибка загрузки.</Alert>
                     )}
                   </Tab.Pane>
                   
-                  {/* Вкладка пользователей */}
                   <Tab.Pane eventKey="users">
                     <div className="d-flex justify-content-between align-items-center mb-4">
                       <h5 className="mb-0">Управление пользователями</h5>
@@ -404,7 +470,7 @@ const AdminPanel = () => {
                       </Button>
                     </div>
                     
-                    {loading ? (
+                    {isUsersLoading ? (
                       <div className="text-center py-5">
                         <Spinner animation="border" variant="primary" />
                         <p className="mt-2">Загрузка пользователей...</p>
@@ -471,83 +537,93 @@ const AdminPanel = () => {
                         </Table>
                       </div>
                     ) : (
-                      <Alert variant="info">Нет пользователей для отображения</Alert>
+                      <Alert variant="info">Нет пользователей для отображения {usersError ? `(${usersError})` : ''}</Alert>
                     )}
                   </Tab.Pane>
                   
-                  {/* Вкладка настроек */}
                   <Tab.Pane eventKey="settings">
                     <h5 className="mb-4">Настройки системы</h5>
                     
-                    {loading ? (
+                    {isSettingsLoading ? (
                       <div className="text-center py-5">
                         <Spinner animation="border" variant="primary" />
                         <p className="mt-2">Загрузка настроек...</p>
                       </div>
+                    ) : localSettings ? (
+                      <Form onSubmit={handleSettingsSubmit}>
+                        <Form.Group className="mb-3">
+                          <Form.Check 
+                            type="switch"
+                            id="registration-enabled"
+                            label="Регистрация пользователей разрешена"
+                            checked={localSettings.registrationEnabled || false}
+                            onChange={handleToggleRegistration}
+                          />
+                          <Form.Text className="text-muted">
+                            Когда регистрация отключена, новые пользователи не могут создавать аккаунты. Только администратор может создавать новых пользователей.
+                          </Form.Text>
+                        </Form.Group>
+                        
+                        <Form.Group className="mb-3">
+                          <Form.Label>Максимальный размер загружаемых файлов (МБ)</Form.Label>
+                          <Form.Control 
+                            type="number" 
+                            name="maxUploadSize"
+                            value={localSettings.maxUploadSize ?? ''}
+                            onChange={handleSettingsChange}
+                            min="1"
+                            max="100"
+                          />
+                        </Form.Group>
+                        
+                        <Form.Group className="mb-3">
+                          <Form.Label>Время хранения сообщений (дней)</Form.Label>
+                          <Form.Control 
+                            type="number" 
+                            name="messageRetentionDays"
+                            value={localSettings.messageRetentionDays ?? ''}
+                            onChange={handleSettingsChange}
+                            min="1"
+                          />
+                          <Form.Text className="text-muted">
+                            Сообщения старше указанного срока будут автоматически удалены для экономии места.
+                          </Form.Text>
+                        </Form.Group>
+                        
+                        <Form.Group className="mb-3">
+                          <Form.Label>Максимальное время звонка (секунд)</Form.Label>
+                          <Form.Control 
+                            type="number" 
+                            name="callTimeout"
+                            value={localSettings.callTimeout ?? ''}
+                            onChange={handleSettingsChange}
+                            min="10"
+                            max="300"
+                          />
+                          <Form.Text className="text-muted">
+                            Время ожидания ответа на звонок.
+                          </Form.Text>
+                        </Form.Group>
+                        
+                        <Form.Group className="mb-3">
+                          <Form.Label>Максимальное количество участников в групповом чате</Form.Label>
+                          <Form.Control 
+                            type="number" 
+                            name="maxGroupSize"
+                            value={localSettings.maxGroupSize ?? ''}
+                            onChange={handleSettingsChange}
+                            min="2"
+                            max="100"
+                          />
+                        </Form.Group>
+
+                        <Button variant="primary" type="submit" disabled={adminContextLoading.settings}>
+                          {adminContextLoading.settings ? 'Сохранение...' : 'Сохранить настройки'}
+                        </Button>
+                        {settingsError && <Alert variant="danger" className="mt-3">Ошибка сохранения: {settingsError}</Alert>}
+                      </Form>
                     ) : (
-                    <Form>
-                      <Form.Group className="mb-3">
-                        <Form.Check 
-                          type="switch"
-                          id="registration-enabled"
-                          label="Регистрация пользователей разрешена"
-                          checked={settings?.registrationEnabled}
-                          onChange={handleToggleRegistration}
-                        />
-                        <Form.Text className="text-muted">
-                          Когда регистрация отключена, новые пользователи не могут создавать аккаунты. Только администратор может создавать новых пользователей.
-                        </Form.Text>
-                      </Form.Group>
-                      
-                      <Form.Group className="mb-3">
-                        <Form.Label>Максимальный размер загружаемых файлов (МБ)</Form.Label>
-                        <Form.Control 
-                          type="number" 
-                          value={settings?.maxUploadSize} 
-                          onChange={(e) => settings && updateSettings({ maxUploadSize: parseInt(e.target.value, 10) })}
-                          min="1"
-                          max="100"
-                        />
-                      </Form.Group>
-                      
-                      <Form.Group className="mb-3">
-                        <Form.Label>Время хранения сообщений (дней)</Form.Label>
-                        <Form.Control 
-                          type="number" 
-                          value={settings?.messageRetentionDays} 
-                          onChange={(e) => settings && updateSettings({ messageRetentionDays: parseInt(e.target.value, 10) })}
-                          min="1"
-                        />
-                        <Form.Text className="text-muted">
-                          Сообщения старше указанного срока будут автоматически удалены для экономии места.
-                        </Form.Text>
-                      </Form.Group>
-                      
-                      <Form.Group className="mb-3">
-                        <Form.Label>Максимальное время звонка (секунд)</Form.Label>
-                        <Form.Control 
-                          type="number" 
-                          value={settings?.callTimeout} 
-                          onChange={(e) => settings && updateSettings({ callTimeout: parseInt(e.target.value, 10) })}
-                          min="10"
-                          max="300"
-                        />
-                        <Form.Text className="text-muted">
-                          Время ожидания ответа на звонок.
-                        </Form.Text>
-                      </Form.Group>
-                      
-                      <Form.Group className="mb-3">
-                        <Form.Label>Максимальное количество участников в групповом чате</Form.Label>
-                        <Form.Control 
-                          type="number" 
-                          value={settings?.maxGroupSize} 
-                          onChange={(e) => settings && updateSettings({ maxGroupSize: parseInt(e.target.value, 10) })}
-                          min="2"
-                          max="100"
-                        />
-                      </Form.Group>
-                    </Form>
+                      <Alert variant="danger">Не удалось загрузить настройки {settingsError ? `(${settingsError})` : ''}</Alert>
                     )}
                   </Tab.Pane>
                 </Tab.Content>
@@ -557,7 +633,6 @@ const AdminPanel = () => {
         </Card.Body>
       </Card>
       
-      {/* Модальное окно создания пользователя */}
       <Modal show={showCreateModal} onHide={() => setShowCreateModal(false)}>
         <Modal.Header closeButton>
           <Modal.Title>Создание нового пользователя</Modal.Title>
@@ -636,15 +711,14 @@ const AdminPanel = () => {
               <Button variant="secondary" className="me-2" onClick={() => setShowCreateModal(false)}>
                 Отмена
               </Button>
-              <Button variant="primary" type="submit" disabled={loading}>
-                {loading ? 'Создание...' : 'Создать пользователя'}
+              <Button variant="primary" type="submit" disabled={adminContextLoading}>
+                {adminContextLoading ? 'Создание...' : 'Создать пользователя'}
               </Button>
             </div>
           </Form>
         </Modal.Body>
       </Modal>
       
-      {/* Модальное окно редактирования пользователя */}
       <Modal show={showEditModal} onHide={() => setShowEditModal(false)}>
         <Modal.Header closeButton>
           <Modal.Title>Редактирование пользователя</Modal.Title>
@@ -724,15 +798,14 @@ const AdminPanel = () => {
               <Button variant="secondary" className="me-2" onClick={() => setShowEditModal(false)}>
                 Отмена
               </Button>
-              <Button variant="primary" type="submit" disabled={loading}>
-                {loading ? 'Сохранение...' : 'Сохранить изменения'}
+              <Button variant="primary" type="submit" disabled={adminContextLoading}>
+                {adminContextLoading ? 'Сохранение...' : 'Сохранить изменения'}
               </Button>
             </div>
           </Form>
         </Modal.Body>
       </Modal>
       
-      {/* Модальное окно удаления пользователя */}
       <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)}>
         <Modal.Header closeButton>
           <Modal.Title>Подтверждение удаления</Modal.Title>
@@ -749,8 +822,8 @@ const AdminPanel = () => {
           <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>
             Отмена
           </Button>
-          <Button variant="danger" onClick={handleDeleteUserConfirm} disabled={loading}>
-            {loading ? 'Удаление...' : 'Удалить пользователя'}
+          <Button variant="danger" onClick={handleDeleteUserConfirm} disabled={adminContextLoading}>
+            {adminContextLoading ? 'Удаление...' : 'Удалить пользователя'}
           </Button>
         </Modal.Footer>
       </Modal>

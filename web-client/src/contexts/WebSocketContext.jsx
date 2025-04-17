@@ -40,59 +40,20 @@ export const WebSocketProvider = ({ children }) => {
   const [reconnectCount, setReconnectCount] = useState(0);
   const [ready, setReady] = useState(false);
   
-  // WebSocket ссылка и таймеры
   const socketRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const pingIntervalRef = useRef(null);
   const connectTimeoutRef = useRef(null);
   
-  // Константы
   const maxReconnectAttempts = 5;
-  const pingInterval = 30000; // 30 секунд
-  const connectionTimeout = 10000; // 10 секунд
+  const pingInterval = 30000; 
+  const connectionTimeout = 10000;
   
-  // Функция для создания WebSocket URL
   const getWebSocketUrl = useCallback(() => {
     if (!token) return null;
     return `${WS_URL}?token=${encodeURIComponent(token)}`;
   }, [token]);
   
-  // Функция для очистки таймеров и ссылок
-  const cleanup = useCallback(() => {
-    console.log('WebSocketContext: Очистка ресурсов');
-    
-    // Очищаем все таймеры
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current);
-      pingIntervalRef.current = null;
-    }
-    
-    if (connectTimeoutRef.current) {
-      clearTimeout(connectTimeoutRef.current);
-      connectTimeoutRef.current = null;
-    }
-    
-    // Закрываем соединение
-    if (socketRef.current) {
-      try {
-        socketRef.current.close();
-      } catch (e) {
-        console.error('WebSocketContext: Ошибка при закрытии соединения', e);
-      }
-      socketRef.current = null;
-    }
-    
-    // Сбрасываем состояния
-    setIsConnected(false);
-    setReady(false);
-  }, []);
-  
-  // Функция для отправки сообщений
   const sendMessage = useCallback((type, payload = {}) => {
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
       console.warn('WebSocketContext: Попытка отправить сообщение без активного соединения');
@@ -109,26 +70,52 @@ export const WebSocketProvider = ({ children }) => {
     }
   }, []);
   
-  // Функция для отправки ping
   const sendPing = useCallback(() => {
-    if (isConnected && socketRef.current) {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       sendMessage(WS_TYPES.PING, { timestamp: Date.now() });
     }
-  }, [isConnected, sendMessage]);
+  }, [sendMessage]);
   
-  // Функция для установки соединения
-  const connect = useCallback(() => {
-    // Очищаем предыдущие ресурсы
-    cleanup();
+  const cleanup = useCallback(() => {
+    console.log('WebSocketContext: Очистка ресурсов');
     
-    if (!token || !isAuthenticated) {
-      console.log('WebSocketContext: Нет токена или пользователь не аутентифицирован - пропускаем подключение');
-      return;
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
     }
     
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+    
+    if (connectTimeoutRef.current) {
+      clearTimeout(connectTimeoutRef.current);
+      connectTimeoutRef.current = null;
+    }
+    
+    if (socketRef.current) {
+      try {
+        socketRef.current.close();
+      } catch (e) {
+        console.error('WebSocketContext: Ошибка при закрытии соединения', e);
+      }
+      socketRef.current = null;
+    }
+    
+    setIsConnected(false);
+    setReady(false);
+  }, []);
+  
+  const connect = useCallback(() => {
+    if (socketRef.current) {
+      console.log('WebSocketContext: Попытка подключения при существующем сокете, пропуск.');
+      return;
+    }
+
     const wsUrl = getWebSocketUrl();
     if (!wsUrl) {
-      console.error('WebSocketContext: Не удалось сформировать URL для WebSocket');
+      console.error('WebSocketContext: Не удалось сформировать URL для WebSocket (нет токена?)');
       return;
     }
     
@@ -137,67 +124,32 @@ export const WebSocketProvider = ({ children }) => {
       tokenLength: token?.length || 0,
       attempt: reconnectCount + 1
     });
-    
+
+    clearTimeout(reconnectTimeoutRef.current);
+    reconnectTimeoutRef.current = null;
+    clearInterval(pingIntervalRef.current);
+    pingIntervalRef.current = null;
+    clearTimeout(connectTimeoutRef.current);
+    connectTimeoutRef.current = null;
+
     try {
-      // Создаем новое соединение
       socketRef.current = new WebSocket(wsUrl);
+      setIsConnected(false);
+      setReady(false);
       
-      // Устанавливаем таймаут на подключение
-      connectTimeoutRef.current = setTimeout(() => {
-        if (socketRef.current && socketRef.current.readyState !== WebSocket.OPEN) {
-          console.error('WebSocketContext: Таймаут подключения');
-          
-          try {
-            socketRef.current.close();
-          } catch (e) {
-            console.error('WebSocketContext: Ошибка при закрытии соединения после таймаута', e);
-          }
-          
-          socketRef.current = null;
-          setIsConnected(false);
-          
-          // Пробуем переподключиться
-          if (reconnectCount < maxReconnectAttempts) {
-            const delay = Math.min(1000 * Math.pow(2, reconnectCount), 30000);
-            console.log(`WebSocketContext: Повторная попытка подключения через ${delay}ms (${reconnectCount + 1}/${maxReconnectAttempts})`);
-            
-            reconnectTimeoutRef.current = setTimeout(() => {
-              setReconnectCount(prev => prev + 1);
-              connect();
-            }, delay);
-          } else {
-            setConnectionError('Не удалось подключиться к серверу после нескольких попыток');
-          }
-        }
-      }, connectionTimeout);
-      
-      // Обработчик открытия соединения
       socketRef.current.onopen = () => {
         console.log('WebSocketContext: Соединение установлено');
-        
-        // Очищаем таймаут подключения
-        if (connectTimeoutRef.current) {
-          clearTimeout(connectTimeoutRef.current);
-          connectTimeoutRef.current = null;
-        }
         
         setIsConnected(true);
         setConnectionError(null);
         setReconnectCount(0);
         setReady(true);
         
-        // Устанавливаем ping интервал
-        if (pingIntervalRef.current) {
-          clearInterval(pingIntervalRef.current);
-        }
-        
         pingIntervalRef.current = setInterval(sendPing, pingInterval);
         
-        // Отправляем первый ping для проверки соединения
         setTimeout(sendPing, 1000);
       };
       
-      // Обработчик закрытия соединения
       socketRef.current.onclose = (event) => {
         console.log('WebSocketContext: Соединение закрыто', {
           code: event.code,
@@ -205,54 +157,40 @@ export const WebSocketProvider = ({ children }) => {
           wasClean: event.wasClean
         });
         
+        socketRef.current = null;
         setIsConnected(false);
         setReady(false);
-        
-        // Очищаем таймеры
-        if (pingIntervalRef.current) {
-          clearInterval(pingIntervalRef.current);
-          pingIntervalRef.current = null;
-        }
-        
-        if (connectTimeoutRef.current) {
-          clearTimeout(connectTimeoutRef.current);
-          connectTimeoutRef.current = null;
-        }
-        
-        // Если не чистое закрытие, пробуем переподключиться
+        clearInterval(pingIntervalRef.current);
+        pingIntervalRef.current = null;
+        clearTimeout(connectTimeoutRef.current);
+        connectTimeoutRef.current = null;
+
         if (!event.wasClean && reconnectCount < maxReconnectAttempts && token && isAuthenticated) {
           const delay = Math.min(1000 * Math.pow(2, reconnectCount), 30000);
-          console.log(`WebSocketContext: Повторная попытка подключения через ${delay}ms (${reconnectCount + 1}/${maxReconnectAttempts})`);
-          
+          console.log(`WebSocketContext: Планируем повторную попытку через ${delay}ms (${reconnectCount + 1}/${maxReconnectAttempts})`);
           reconnectTimeoutRef.current = setTimeout(() => {
             setReconnectCount(prev => prev + 1);
-            connect();
           }, delay);
         } else if (reconnectCount >= maxReconnectAttempts) {
           setConnectionError('Превышено максимальное количество попыток переподключения');
         }
       };
       
-      // Обработчик ошибок
       socketRef.current.onerror = (error) => {
         console.error('WebSocketContext: Ошибка WebSocket', error);
         setConnectionError('Ошибка соединения с сервером');
       };
       
-      // Обработчик сообщений
       socketRef.current.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           
-          // Обновляем последнее полученное сообщение
           setLastMessage({ data, timestamp: Date.now() });
           
-          // Обрабатываем pong
           if (data.type === WS_TYPES.PONG) {
             console.log('WebSocketContext: Получен pong от сервера');
           }
           
-          // Отладочные сообщения
           if (data.type === WS_TYPES.DEBUG) {
             console.log('WebSocketContext: Получено отладочное сообщение', data.payload);
           }
@@ -261,47 +199,48 @@ export const WebSocketProvider = ({ children }) => {
         }
       };
     } catch (error) {
-      console.error('WebSocketContext: Ошибка при инициализации WebSocket', error);
-      setConnectionError(`Ошибка при инициализации соединения: ${error.message}`);
-      
-      // Пробуем переподключиться
-      if (reconnectCount < maxReconnectAttempts) {
-        const delay = Math.min(1000 * Math.pow(2, reconnectCount), 30000);
-        console.log(`WebSocketContext: Повторная попытка подключения через ${delay}ms (${reconnectCount + 1}/${maxReconnectAttempts})`);
-        
-        reconnectTimeoutRef.current = setTimeout(() => {
-          setReconnectCount(prev => prev + 1);
-          connect();
-        }, delay);
-      }
+      console.error('WebSocketContext: Ошибка при создании WebSocket', error);
+      setConnectionError('Ошибка инициализации WebSocket');
+      socketRef.current = null;
     }
-  }, [token, isAuthenticated, reconnectCount, getWebSocketUrl, cleanup, sendPing]);
+  }, [token, WS_URL, reconnectCount, getWebSocketUrl, sendPing, isAuthenticated]);
   
-  // Эффект для установки соединения при изменении состояния аутентификации
   useEffect(() => {
     if (isAuthenticated && token) {
-      console.log('WebSocketContext: Пользователь аутентифицирован, устанавливаем соединение');
-      connect();
+      if (!socketRef.current) {
+         console.log('WebSocketContext: Пользователь аутентифицирован и нет сокета, вызываем connect.');
+         connect();
+      } else {
+         console.log('WebSocketContext: Пользователь аутентифицирован, но сокет уже существует/подключается, пропускаем connect.');
+      }
     } else {
-      console.log('WebSocketContext: Пользователь не аутентифицирован, закрываем соединение');
-      cleanup();
+      if (socketRef.current) {
+        console.log('WebSocketContext: Пользователь не аутентифицирован или нет токена, вызываем cleanup.');
+        cleanup();
+        setReconnectCount(0);
+        setConnectionError(null);
+      }
     }
-    
-    return cleanup;
+
+    return () => {
+        if (socketRef.current) {
+             console.log('WebSocketContext: Размонтирование компонента, вызываем cleanup.');
+             cleanup();
+        }
+    };
   }, [isAuthenticated, token, connect, cleanup]);
   
-  // Контекст для предоставления компонентам
-  const contextValue = {
+  const value = {
     socket: socketRef.current,
     isConnected,
     sendMessage,
     lastMessage,
     ready,
-    error: connectionError
+    error: connectionError,
   };
-  
+
   return (
-    <WebSocketContext.Provider value={contextValue}>
+    <WebSocketContext.Provider value={value}>
       {children}
     </WebSocketContext.Provider>
   );

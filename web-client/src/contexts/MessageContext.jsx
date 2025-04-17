@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useAuth } from './AuthContext';
 import { useWebSocket } from './WebSocketContext';
 import * as api from '../api/messagesApi';
+import { toast } from 'react-toastify';
 
 // Создаем контекст с дефолтными значениями чтобы избежать null
 const MessageContext = createContext({
@@ -48,7 +49,7 @@ export const MessageProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [typingUsers, setTypingUsers] = useState({});
-  const [lastChatsRequest, setLastChatsRequest] = useState(0); // Добавляем состояние для отслеживания времени последнего запроса
+  const [lastChatsRequest, setLastChatsRequest] = useState(0);
   
   // Реф для отслеживания монтирования компонента
   const mountedRef = useRef(true);
@@ -402,46 +403,62 @@ export const MessageProvider = ({ children }) => {
     }
   }, [isAuthenticated]);
   
-  // Создание нового чата
-  const createChat = useCallback(async (userIds, groupName = null) => {
+  // Функция для создания нового чата
+  const createChat = useCallback(async (chatData) => {
     if (!mountedRef.current || !isAuthenticated) {
+      console.warn('MessageContext: Попытка создать чат без аутентификации или компонент размонтирован');
       return null;
     }
     
-    console.log(`MessageContext: Создание нового чата с пользователями: ${userIds.join(', ')}`);
+    console.log('MessageContext: Попытка создания чата с данными:', chatData);
     setLoading(true);
+    setError(null);
     
     try {
-      const response = await api.createChat(userIds, groupName);
-      
-      if (!mountedRef.current) return null;
-      
-      console.log('MessageContext: Новый чат создан успешно', response.data);
-      
-      // Добавляем новый чат в список
-      setChats(prev => [response.data, ...prev]);
-      
-      // Устанавливаем новый чат как активный
-      setActiveChat(response.data);
-      
-      // Очищаем сообщения для нового чата
-      setMessages([]);
-      
-      return response.data;
-    } catch (err) {
-      console.error('MessageContext: Ошибка создания нового чата:', err);
-      
-      if (mountedRef.current) {
-        setError('Не удалось создать новый чат');
+      // Вызываем API для создания чата
+      console.log('MessageContext: Вызов api.createChat... Объект api:', api);
+      let newChat = null;
+      try {
+          console.log('MessageContext: Внутри вложенного try перед вызовом api.createChat');
+          newChat = await api.createChat(chatData);
+          console.log('MessageContext: Вызов api.createChat успешно завершен (или нет ошибки).');
+      } catch (innerError) {
+          console.error('MessageContext: Мгновенная ошибка при вызове api.createChat:', innerError);
+          throw innerError; // Перебрасываем ошибку во внешний catch
       }
       
+      if (!mountedRef.current) return null;
+
+      if (newChat && newChat.id) {
+        console.log('MessageContext: Чат успешно создан:', newChat);
+        // Добавляем новый чат в начало списка
+        setChats(prev => [newChat, ...prev]); 
+        // Устанавливаем новый чат активным
+        setActiveChat(newChat);
+        // Загружаем сообщения для нового чата (он пока пустой)
+        setMessages([]); 
+        toast.success(`Чат ${newChat.name || 'успешно'} создан!`);
+        return newChat;
+      } else {
+        console.error('MessageContext: API создания чата вернуло некорректный ответ', newChat);
+        setError('Не удалось создать чат: некорректный ответ сервера.');
+        toast.error('Не удалось создать чат.');
+        return null;
+      }
+    } catch (err) {
+      console.error('MessageContext: Ошибка при создании чата:', err);
+      if (mountedRef.current) {
+        const errorMessage = err.response?.data?.message || err.message || 'Неизвестная ошибка при создании чата.';
+        setError(errorMessage);
+        toast.error(`Ошибка создания чата: ${errorMessage}`);
+      }
       return null;
     } finally {
       if (mountedRef.current) {
         setLoading(false);
       }
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, setActiveChat]);
 
   const contextValue = {
     chats,

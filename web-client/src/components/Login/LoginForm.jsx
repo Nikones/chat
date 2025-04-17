@@ -32,54 +32,17 @@ const LoginForm = () => {
         console.log('LoginForm: Получен ответ с токеном от сервера');
         console.log('LoginForm: Длина токена:', response.data.token.length);
         
-        // Создаем тестовое WebSocket соединение после входа
-        const testWebSocketConnection = () => {
-          console.log('LoginForm: Тестирование WebSocket соединения после входа');
-          
-          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-          const wsUrl = `${protocol}//${window.location.host}/api/ws?token=${response.data.token}`;
-          
-          console.log('LoginForm: Подключение к', wsUrl.split('?')[0], 'с токеном в URL');
-          
-          const testWs = new WebSocket(wsUrl);
-          
-          testWs.onopen = () => {
-            console.log('LoginForm: ТЕСТ - WebSocket соединение успешно установлено');
-            // Закрываем тестовое соединение через 3 секунды
-            setTimeout(() => {
-              console.log('LoginForm: ТЕСТ - Закрытие тестового соединения');
-              testWs.close(1000, 'Тестовое соединение закрыто');
-            }, 3000);
-          };
-          
-          testWs.onclose = (event) => {
-            console.log('LoginForm: ТЕСТ - WebSocket соединение закрыто', {
-              code: event.code,
-              reason: event.reason,
-              wasClean: event.wasClean
-            });
-          };
-          
-          testWs.onerror = (error) => {
-            console.error('LoginForm: ТЕСТ - Ошибка WebSocket соединения', error);
-          };
-        };
-
-        // Сохраняем токен в localStorage под несколькими ключами для совместимости
-        localStorage.setItem('auth_token', response.data.token);
+        // Удаляем тестовый код WebSocket подключения, это будет делать WebSocketContext
+        
+        // Сохраняем токен только в один ключ localStorage для единообразия
         localStorage.setItem('token', response.data.token);
         
         // Проверяем сохранение токена
         setTimeout(() => {
-          const savedAuthToken = localStorage.getItem('auth_token');
           const savedToken = localStorage.getItem('token');
-          console.log('LoginForm: Проверка сохранения токенов:', {
-            auth_token: savedAuthToken ? 'сохранен' : 'не сохранен',
+          console.log('LoginForm: Проверка сохранения токена:', {
             token: savedToken ? 'сохранен' : 'не сохранен'
           });
-          
-          // Тестируем WebSocket соединение
-          testWebSocketConnection();
         }, 500);
         
         // Сохраняем в контексте авторизации

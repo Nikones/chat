@@ -190,9 +190,9 @@ class WebSocketService {
    * @returns {boolean} Успешно ли отправлено сообщение
    */
   sendMessage(message) {
-    if (!this.isConnected || !this.socket) {
-      console.warn('WebSocketService: Попытка отправить сообщение без соединения');
-      return false;
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) { 
+      console.warn('WebSocketService: Попытка отправить сообщение без установленного соединения');
+      return false; 
     }
     
     try {

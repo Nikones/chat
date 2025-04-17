@@ -81,42 +81,7 @@
         }
       }
       
-      // Тестирование создания WebSocket
-      try {
-        const testConnection = () => {
-          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-          const testToken = "test_token_" + Date.now();
-          const wsUrl = `${protocol}//${window.location.host}/api/ws?token=${testToken}`;
-          console.log('Тестовый WebSocket URL:', wsUrl.split('?')[0], 'с тестовым токеном');
-          
-          try {
-            // Пробуем создать объект WebSocket с тестовым токеном в URL
-            const wsTest = new WebSocket(wsUrl);
-            console.log('WebSocket объект успешно создан');
-            
-            wsTest.onopen = () => {
-              console.log('Тестовое WebSocket соединение открыто!');
-              // Успешно подключились - закрываем соединение
-              setTimeout(() => wsTest.close(), 1000);
-            };
-            
-            wsTest.onerror = (error) => {
-              console.error('Ошибка тестового WebSocket соединения:', error);
-            };
-            
-            wsTest.onclose = (event) => {
-              console.log('Тестовое WebSocket соединение закрыто', event.code, event.reason);
-            };
-          } catch (wsError) {
-            console.error('Ошибка создания WebSocket объекта:', wsError);
-          }
-        };
-        
-        // Запускаем тест через 2 секунды
-        setTimeout(testConnection, 2000);
-      } catch (error) {
-        console.error('Общая ошибка тестирования WebSocket:', error);
-      }
+      // Код автоматического тестирования WebSocket соединения удален
     })();
   </script>
   

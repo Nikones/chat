@@ -5,6 +5,7 @@ import axios from 'axios';
 
 // Контексты
 import { useAuth } from './contexts/AuthContext';
+import { AdminProvider } from './contexts/AdminContext';
 
 // Компоненты страниц
 import Login from './components/Auth/Login';
@@ -93,7 +94,9 @@ const App = () => {
       {/* Защищенные маршруты внутри Layout */}
       <Route path="/" element={
         <PrivateRoute>
-          <Layout />
+          <AdminProvider>
+            <Layout />
+          </AdminProvider>
         </PrivateRoute>
       }>
         <Route index element={<Chat />} />
